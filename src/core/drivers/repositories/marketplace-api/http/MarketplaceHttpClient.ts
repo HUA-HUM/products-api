@@ -13,7 +13,7 @@ export class MarketplaceHttpClient {
 
     this.client = axios.create({
       baseURL,
-      timeout: 30000,
+      timeout: 90000,
       headers: {
         'Content-Type': 'application/json',
         Accept: '*/*'
