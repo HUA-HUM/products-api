@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { MarketplaceImportController } from 'src/app/controller/marketplaces/import-product/MarketplaceImport.Controller';
 import { ImportMarketplaceProducts } from 'src/core/interactors/marketplace/import-products/ImportMarketplaceProducts';
 import { MegatoneImportStrategy } from 'src/core/interactors/marketplace/import-products/strategies/MegatoneImportStrategy';
 import { OnCityImportStrategy } from 'src/core/interactors/marketplace/import-products/strategies/OnCityImportStrategy';
@@ -18,7 +17,8 @@ import { SendBulkProductSyncRepository } from 'src/core/drivers/repositories/mad
 import { ProductSyncRepository } from 'src/core/drivers/repositories/madre-api/product-sync/ProductSyncRepository';
 
 @Module({
-  controllers: [MarketplaceImportController],
+  // ❌ NO imports
+  // ❌ NO controllers
 
   providers: [
     /* ----------------------------- HTTP ----------------------------- */
