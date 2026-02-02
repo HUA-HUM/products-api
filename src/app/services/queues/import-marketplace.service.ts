@@ -29,13 +29,17 @@ export class ImportMarketplaceService {
 
     await importMarketplaceQueue.add(
       IMPORT_MARKETPLACE_QUEUE_NAME,
-      { marketplace },
       {
-        jobId: `import:${marketplace}`,
+        marketplace,
+        meta: {
+          requestedAt: new Date().toISOString(),
+          requestedAtLocal: new Date().toLocaleString('es-AR'),
+          triggeredBy: 'manual'
+        }
+      },
+      {
         attempts: 3,
-        backoff: { type: 'exponential', delay: 5_000 },
-        removeOnComplete: true,
-        removeOnFail: 50
+        backoff: { type: 'exponential', delay: 5_000 }
       }
     );
     return { accepted: true };

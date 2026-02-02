@@ -16,20 +16,46 @@ export class ImportMarketplaceWorker implements OnModuleInit, OnModuleDestroy {
     this.worker = new Worker(
       IMPORT_MARKETPLACE_QUEUE_NAME,
       async (job: Job<{ marketplace: ProductSyncMarketplace }>) => {
-        this.logger.log(`[WORKER] start import | marketplace=${job.data.marketplace} | jobId=${job.id}`);
+        const startedAt = new Date();
 
-        await this.importMarketplaceProducts.execute(job.data.marketplace);
+        this.logger.log(`[WORKER] start | marketplace=${job.data.marketplace} | jobId=${job.id}`);
 
-        this.logger.log(`[WORKER] finished import | marketplace=${job.data.marketplace} | jobId=${job.id}`);
+        job.log(`Started at ${startedAt.toISOString()}`);
+
+        await this.importMarketplaceProducts.execute(job.data.marketplace, (progress, log) => {
+          job.updateProgress({
+            ...progress,
+            updatedAt: new Date().toISOString()
+          });
+
+          if (log) {
+            job.log(log);
+          }
+        });
+
+        const finishedAt = new Date();
+
+        job.log(`Finished at ${finishedAt.toISOString()}`);
+
+        this.logger.log(`[WORKER] finished | marketplace=${job.data.marketplace} | jobId=${job.id}`);
+
+        return {
+          status: 'SUCCESS',
+          startedAt: startedAt.toISOString(),
+          finishedAt: finishedAt.toISOString()
+        };
       },
       {
         connection: bullmqConnection,
-        concurrency: 1 // IMPORTANTÍSIMO: evita imports simultáneos
+        concurrency: 1,
+        lockDuration: 10 * 60 * 1000
       }
     );
 
     this.worker.on('failed', (job, err) => {
       this.logger.error(`[WORKER] failed | jobId=${job?.id}`, err?.stack);
+
+      job?.log(`FAILED: ${err?.message}`);
     });
   }
 
