@@ -5,6 +5,12 @@ import { IProductSyncRepository } from 'src/core/adapters/repositories/madre/pro
 import { ProductSyncMarketplace } from 'src/core/entitis/madre-api/product-sync/ProductSyncMarketplace';
 import { MarketplaceImportStrategyResolver } from './factory/MarketplaceImportStrategyResolver';
 
+export type ImportProgress = {
+  batchesProcessed: number;
+  itemsProcessed: number;
+  itemsFailed: number;
+};
+
 @Injectable()
 export class ImportMarketplaceProducts {
   private readonly logger = new Logger(ImportMarketplaceProducts.name);
@@ -23,38 +29,34 @@ export class ImportMarketplaceProducts {
     private readonly syncRuns: IProductSyncRepository
   ) {}
 
-  async execute(marketplace: ProductSyncMarketplace): Promise<void> {
+  async execute(
+    marketplace: ProductSyncMarketplace,
+    onProgress?: (progress: ImportProgress, log?: string) => void
+  ): Promise<void> {
     const strategy = this.strategyResolver.resolve(marketplace);
-
-    // 🔹 el runId lo genera el repository
     const { runId } = await this.syncRuns.start(marketplace);
 
     let offset = 0;
     let hasNext = true;
-    let failedItems = 0;
-    let totalItems = 0;
-    let totalBatches = 0;
 
-    this.logger.log(`[IMPORT][${marketplace}] run started | runId=${runId}`);
+    let totalBatches = 0;
+    let totalItems = 0;
+    let failedItems = 0;
+
+    this.logger.log(`[IMPORT][${marketplace}] started | runId=${runId}`);
 
     try {
       while (hasNext) {
         const response = await strategy.getProducts(this.BATCH_LIMIT, offset);
 
-        /* ================= VALIDACIONES ================= */
-
         if (!response || !Array.isArray(response.items)) {
-          throw new Error(`[${marketplace}] Invalid response format`);
+          throw new Error(`[${marketplace}] Invalid response`);
         }
 
-        if (response.items.length === 0) {
-          break;
-        }
+        if (response.items.length === 0) break;
 
-        totalBatches += 1;
+        totalBatches++;
         totalItems += response.items.length;
-
-        /* ================= PAYLOAD ================= */
 
         const payload: BulkMarketplaceProductsDto = {
           marketplace,
@@ -69,73 +71,55 @@ export class ImportMarketplaceProducts {
           }))
         };
 
-        const batchSuccess = await this.sendWithRetry(payload);
+        const success = await this.sendWithRetry(payload);
 
-        if (!batchSuccess) {
+        if (!success) {
           failedItems += payload.items.length;
-
-          this.logger.warn(`[IMPORT][${marketplace}] batch failed | runId=${runId} | items=${payload.items.length}`);
         }
-
-        /* ================= PROGRESS ================= */
 
         await this.syncRuns.progress(runId, {
           batches: 1,
           items: payload.items.length,
-          failed: batchSuccess ? 0 : payload.items.length
+          failed: success ? 0 : payload.items.length
         });
 
-        /* ================= PAGINATION ================= */
+        onProgress?.(
+          {
+            batchesProcessed: totalBatches,
+            itemsProcessed: totalItems,
+            itemsFailed: failedItems
+          },
+          `Batch ${totalBatches} | items=${payload.items.length} | failed=${success ? 0 : payload.items.length}`
+        );
 
         hasNext = response.hasNext === true;
-
         if (hasNext) {
-          if (typeof response.nextOffset !== 'number') {
-            throw new Error(`[${marketplace}] hasNext=true but nextOffset missing`);
-          }
-
-          offset = response.nextOffset;
+          offset = response.nextOffset!;
         }
       }
-
-      /* ================= FINISH ================= */
 
       await this.syncRuns.finish(runId, failedItems > 0 ? 'PARTIAL' : 'SUCCESS');
 
       this.logger.log(
-        `[IMPORT][${marketplace}] finished | runId=${runId} | batches=${totalBatches} | items=${totalItems} | failed=${failedItems}`
+        `[IMPORT][${marketplace}] finished | runId=${runId} | batches=${totalBatches} | items=${totalItems}`
       );
     } catch (err: any) {
       await this.syncRuns.fail(runId, err?.message ?? 'Unknown error');
-
       this.logger.error(`[IMPORT][${marketplace}] failed | runId=${runId}`, err?.stack);
-
       throw err;
     }
   }
-
-  /* =========================
-     RETRY HANDLER
-  ========================= */
 
   private async sendWithRetry(payload: BulkMarketplaceProductsDto): Promise<boolean> {
     for (let attempt = 1; attempt <= this.MAX_RETRIES; attempt++) {
       try {
         await this.sendBulkProductSync.execute(payload);
         return true;
-      } catch (err) {
-        if (attempt === this.MAX_RETRIES) {
-          return false;
-        }
-
-        await this.sleep(this.RETRY_DELAY_MS);
+      } catch {
+        if (attempt === this.MAX_RETRIES) return false;
+        await new Promise(res => setTimeout(res, this.RETRY_DELAY_MS));
       }
     }
-
     return false;
-  }
-
-  private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
   }
 }

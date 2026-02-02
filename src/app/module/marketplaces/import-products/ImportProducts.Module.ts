@@ -15,17 +15,13 @@ import { GetOnCityProductsAdapter } from 'src/core/drivers/repositories/marketpl
 
 import { SendBulkProductSyncRepository } from 'src/core/drivers/repositories/madre-api/product-sync/SendBulkProductSyncRepository';
 import { ProductSyncRepository } from 'src/core/drivers/repositories/madre-api/product-sync/ProductSyncRepository';
+import { GetProductSyncRunsRepository } from 'src/core/drivers/repositories/madre-api/product-sync/GetProductSyncRunsRepository';
 
 @Module({
-  // ❌ NO imports
-  // ❌ NO controllers
-
   providers: [
-    /* ----------------------------- HTTP ----------------------------- */
     MarketplaceHttpClient,
     MadreHttpClient,
 
-    /* ----------------------------- Madre ---------------------------- */
     {
       provide: 'ISendBulkProductSyncRepository',
       useClass: SendBulkProductSyncRepository
@@ -34,32 +30,30 @@ import { ProductSyncRepository } from 'src/core/drivers/repositories/madre-api/p
       provide: 'IProductSyncRepository',
       useClass: ProductSyncRepository
     },
+    {
+      provide: 'IGetProductSyncRunsRepository',
+      useClass: GetProductSyncRunsRepository
+    },
 
-    /* ----------------------------- Megatone ------------------------- */
     {
       provide: 'IGetMegatoneProductsRepository',
       useClass: GetMegatoneProductsRepository
     },
-
-    /* ----------------------------- OnCity --------------------------- */
     {
       provide: 'IGetOncityProductRepository',
       useClass: GetOncityProductRepository
     },
 
-    /* ----------------------------- Adapters ------------------------- */
     GetMegatoneProductsAdapter,
     GetOnCityProductsAdapter,
 
-    /* ----------------------------- Strategies ----------------------- */
     MegatoneImportStrategy,
     OnCityImportStrategy,
     MarketplaceImportStrategyResolver,
 
-    /* ----------------------------- Interactor ----------------------- */
     ImportMarketplaceProducts
   ],
 
-  exports: [ImportMarketplaceProducts]
+  exports: [ImportMarketplaceProducts, 'IGetProductSyncRunsRepository']
 })
 export class ImportProductsModule {}
