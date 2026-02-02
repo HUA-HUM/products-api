@@ -6,7 +6,7 @@ export function mapOnCityStatus(status: string): ProductSyncStatus {
       return 'ACTIVE';
 
     case 'Pausado':
-      return 'INACTIVE';
+      return 'PAUSED';
 
     default:
       return 'UNKNOWN';
