@@ -1,1 +1,1 @@
-export type ProductSyncStatus = 'ACTIVE' | 'INACTIVE' | 'PENDING' | 'EN_REVISION' | 'ERROR' | string;
+export type ProductSyncStatus = 'ACTIVE' | 'PAUSED' | 'PENDING' | 'EN_REVISION' | 'ERROR' | string;
