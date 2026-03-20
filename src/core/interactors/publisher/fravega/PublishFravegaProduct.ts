@@ -54,8 +54,8 @@ export class PublishFravegaProduct {
       }
 
       /* ======================================
-         2. GET PRODUCT (MADRE)
-      ====================================== */
+   2. GET PRODUCT (MADRE)
+====================================== */
       const product = await this.madreRepository.getBySku(sku);
 
       if (!product) {
@@ -63,7 +63,19 @@ export class PublishFravegaProduct {
 
         return {
           status: 'failed',
-          message: 'PRODUCT_NOT_FOUND'
+          message: 'PRODUCT_NOT_FOUND_IN_MADRE'
+        };
+      }
+
+      /* ======================================
+   2.5 VALIDATION (MELI STATUS)
+====================================== */
+      if (product.meliStatus !== 'active') {
+        console.warn(`[FRAVEGA] SKU ${sku} skipped → MELI status: ${product.meliStatus}`);
+
+        return {
+          status: 'skipped',
+          message: `MELI_STATUS_${product.meliStatus?.toUpperCase() || 'UNKNOWN'}`
         };
       }
 

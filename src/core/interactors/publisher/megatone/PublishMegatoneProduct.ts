@@ -48,14 +48,28 @@ export class PublishMegatoneProduct {
     }
 
     /* ======================================
-       2. GET PRODUCT
-    ====================================== */
+   2. GET PRODUCT (MADRE)
+====================================== */
     const product = await this.madreRepository.getBySku(sku);
 
     if (!product) {
+      console.error(`[MEGATONE] SKU ${sku} not found in Madre`);
+
       return {
         status: 'failed',
-        message: 'PRODUCT_NOT_FOUND'
+        message: 'PRODUCT_NOT_FOUND_IN_MADRE'
+      };
+    }
+
+    /* ======================================
+   2.5 VALIDATION (MELI STATUS)
+====================================== */
+    if (product.meliStatus !== 'active') {
+      console.warn(`[MEGATONE] SKU ${sku} skipped → MELI status: ${product.meliStatus}`);
+
+      return {
+        status: 'skipped',
+        message: `MELI_STATUS_${product.meliStatus?.toUpperCase() || 'UNKNOWN'}`
       };
     }
 
