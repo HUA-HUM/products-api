@@ -2,10 +2,8 @@ import { ICreatePublicationRunRepository } from 'src/core/adapters/repositories/
 import { MadreHttpClient } from '../../http/MadreHttpClient';
 
 type CreatePublicationRunResponse = {
-  data: {
-    run_id: number;
-    status: string;
-  };
+  run_id: number;
+  status: string;
 };
 
 export class CreatePublicationRunRepository implements ICreatePublicationRunRepository {
@@ -14,6 +12,9 @@ export class CreatePublicationRunRepository implements ICreatePublicationRunRepo
   async createRun(data: { marketplaces: string[] }): Promise<{ run_id: number; status: string }> {
     const response = await this.http.post<CreatePublicationRunResponse>('/publication-runs', data);
 
-    return response.data;
+    return {
+      run_id: Number(response.run_id),
+      status: response.status
+    };
   }
 }

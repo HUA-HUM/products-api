@@ -10,10 +10,8 @@ export class ResolveMegatonePrices {
     /* ======================================
        REGLA DE NEGOCIO
     ====================================== */
-    const descuento = price * 0.135;
-    const recargo = price * 0.12;
-
-    let precioPromocional = Math.round(price - descuento + recargo);
+    const descuento = price * 0.05;
+    let precioPromocional = Math.round(price - descuento);
 
     /* ======================================
        GARANTÍA: promo < lista

@@ -5,6 +5,6 @@ export class UpdateJobRepository implements IUpdateJobRepository {
   constructor(private readonly http: MadreHttpClient) {}
 
   async update(id: number, data: any) {
-    await this.http.put(`/publication-jobs/${id}`, data);
+    await this.http.patch(`/publication-jobs/${id}`, data);
   }
 }

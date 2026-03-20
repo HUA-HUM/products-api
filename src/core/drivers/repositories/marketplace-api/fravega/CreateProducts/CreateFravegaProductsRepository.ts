@@ -7,7 +7,8 @@ export class CreateFravegaProductsRepository implements ICreateFravegaProductsRe
 
   async create(body: any): Promise<CreateFravegaProductsResponse> {
     try {
-      const response = await this.http.post<any>('/fravega/products', body);
+      const payload = Array.isArray(body?.items) ? body.items[0] : body;
+      const response = await this.http.post<any>('/fravega/publish', payload);
 
       /* ======================================
          MAP RESPONSE (ajustamos después)

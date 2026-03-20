@@ -1,6 +1,7 @@
-import { Inject } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { ICreatePublicationRunRepository } from 'src/core/adapters/repositories/madre/publisher/publication_run/ICreatePublicationRunRepository';
 
+@Injectable()
 export class CreatePublicationRun {
   constructor(
     @Inject('ICreatePublicationRunRepository')

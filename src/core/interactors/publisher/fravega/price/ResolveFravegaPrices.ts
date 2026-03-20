@@ -6,7 +6,7 @@ export class ResolveFravegaPrices {
 
     const list = Math.round(price);
 
-    const discount = list * 0.03;
+    const discount = list * 0.05;
     let sale = Math.round(list - discount);
 
     if (sale >= list) {

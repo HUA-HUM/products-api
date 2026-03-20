@@ -51,35 +51,66 @@ export class ProcessPublicationJobs {
            SUCCESS / SKIPPED
         ====================================== */
         if (result.status === 'success' || result.status === 'skipped') {
-          await this.updateRepository.update(job.id, {
-            status: result.status,
-            result: result.response ?? null,
-            request_payload: result.payload ?? null
-          });
+          const updated = await this.tryUpdateJob(job.id, this.buildUpdatePayload(result));
 
-          console.log(`[WORKER] Job ${job.id} ${result.status.toUpperCase()}`);
+          if (updated) {
+            console.log(`[WORKER] Job ${job.id} ${result.status.toUpperCase()}`);
+          }
           continue;
         }
 
         /* ======================================
            FAILED (controlado)
         ====================================== */
-        await this.updateRepository.update(job.id, {
-          status: 'failed',
-          error_message: result.message,
-          result: result.response ?? null,
-          request_payload: result.payload ?? null
-        });
+        await this.tryUpdateJob(job.id, this.buildUpdatePayload(result));
 
         console.error(`[WORKER] Job ${job.id} FAILED`, result.message);
       } catch (error: any) {
         console.error(`[WORKER] Job ${job.id} CRASH`, error);
 
-        await this.updateRepository.update(job.id, {
-          status: 'failed',
-          error_message: error?.message || 'Unknown error'
-        });
+        await this.tryUpdateJob(
+          job.id,
+          this.buildUpdatePayload({
+            status: 'failed',
+            message: error?.message || 'Unknown error'
+          })
+        );
       }
     }
+  }
+
+  private async tryUpdateJob(id: number, data: any): Promise<boolean> {
+    try {
+      await this.updateRepository.update(id, data);
+      return true;
+    } catch (error) {
+      console.error(`[WORKER] Job ${id} UPDATE_STATUS_FAILED`, error, data);
+      return false;
+    }
+  }
+
+  private buildUpdatePayload(result: {
+    status: 'success' | 'failed' | 'skipped';
+    message?: string;
+    payload?: any;
+    response?: any;
+  }) {
+    return {
+      status: result.status === 'failed' ? 'fail' : result.status,
+      error_message: result.status === 'failed' ? result.message ?? null : null,
+      request_payload: result.payload ?? null,
+      response_payload: result.response ?? null,
+      marketplace_item_id: this.resolveMarketplaceItemId(result.response)
+    };
+  }
+
+  private resolveMarketplaceItemId(response: any): string | null {
+    return (
+      response?.data?.id ??
+      response?.data?.publicationId ??
+      response?.items?.[0]?.id ??
+      response?.items?.[0]?.publicationId ??
+      null
+    );
   }
 }
