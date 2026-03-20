@@ -6,6 +6,8 @@ export interface MadreProductDto {
   description: string;
 
   categoryId: string;
+  meliStatus?: string;
+  amzStatus?: string;
 
   price: number;
   stock: number;

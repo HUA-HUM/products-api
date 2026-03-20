@@ -37,16 +37,14 @@ export class PublishFravegaProduct {
   async execute(sku: string): Promise<PublishResult> {
     try {
       /* ======================================
-         1. EXISTS (SYNC ITEMS)
-      ====================================== */
+       1. EXISTS
+    ====================================== */
       const exists = await this.existsRepository.exists({
         marketplace: 'fravega',
         sellerSku: sku
       });
 
-      if (exists?.exists === true) {
-        console.log(`[FRAVEGA] SKU ${sku} already exists → SKIPPED`);
-
+      if (exists?.exists) {
         return {
           status: 'skipped',
           message: 'PRODUCT_ALREADY_EXISTS'
@@ -54,29 +52,74 @@ export class PublishFravegaProduct {
       }
 
       /* ======================================
-         2. GET PRODUCT (MADRE)
-      ====================================== */
+       2. GET PRODUCT
+    ====================================== */
       const product = await this.madreRepository.getBySku(sku);
 
       if (!product) {
-        console.error(`[FRAVEGA] SKU ${sku} not found in Madre`);
-
         return {
           status: 'failed',
-          message: 'PRODUCT_NOT_FOUND'
+          message: 'PRODUCT_NOT_FOUND_IN_MADRE'
         };
       }
 
       /* ======================================
-         3. CATEGORY
-      ====================================== */
+       2.5 MELI STATUS
+    ====================================== */
+      if (product.meliStatus !== 'active') {
+        return {
+          status: 'skipped',
+          message: `MELI_STATUS_${product.meliStatus?.toUpperCase() || 'UNKNOWN'}`
+        };
+      }
+
+      /* ======================================
+       2.6 VALIDACIONES BASE
+    ====================================== */
+
+      if (!product.price || product.price <= 0) {
+        return {
+          status: 'failed',
+          message: 'INVALID_PRICE'
+        };
+      }
+
+      if (!product.stock || product.stock <= 0) {
+        return {
+          status: 'skipped',
+          message: 'OUT_OF_STOCK'
+        };
+      }
+
+      if (!product.attributes?.brand) {
+        return {
+          status: 'skipped',
+          message: 'MISSING_BRAND'
+        };
+      }
+
+      if (!product.title || !product.description) {
+        return {
+          status: 'skipped',
+          message: 'MISSING_TITLE_OR_DESCRIPTION'
+        };
+      }
+
+      if (!product.images || product.images.length === 0) {
+        return {
+          status: 'skipped',
+          message: 'MISSING_IMAGES'
+        };
+      }
+
+      /* ======================================
+       3. CATEGORY
+    ====================================== */
       const categoryId = await this.resolveCategory.execute({
-        categoryId: (product as any).categoryId || (product as any).category_mla
+        categoryId: product.categoryId || (product as any).category_mla
       });
 
       if (!categoryId) {
-        console.warn(`[FRAVEGA] SKU ${sku} missing category mapping`);
-
         return {
           status: 'skipped',
           message: 'CATEGORY_NOT_FOUND'
@@ -84,18 +127,23 @@ export class PublishFravegaProduct {
       }
 
       /* ======================================
-         4. BRAND
-      ====================================== */
+       4. BRAND
+    ====================================== */
       const brandId = await this.resolveBrand.execute(product);
 
+      if (!brandId) {
+        return {
+          status: 'skipped',
+          message: 'BRAND_NOT_FOUND'
+        };
+      }
+
       /* ======================================
-         5. ATTRIBUTES
-      ====================================== */
+       5. ATTRIBUTES
+    ====================================== */
       const attributes = await this.resolveAttributes.execute(categoryId, product);
 
       if (!attributes) {
-        console.warn(`[FRAVEGA] SKU ${sku} missing required attributes`);
-
         return {
           status: 'skipped',
           message: 'MISSING_REQUIRED_ATTRIBUTES'
@@ -103,13 +151,20 @@ export class PublishFravegaProduct {
       }
 
       /* ======================================
-         6. PRICES
-      ====================================== */
+       6. PRICES
+    ====================================== */
       const prices = this.resolvePrices.execute(product.price);
 
+      if (!prices) {
+        return {
+          status: 'failed',
+          message: 'PRICE_MAPPING_FAILED'
+        };
+      }
+
       /* ======================================
-         7. BUILD PAYLOAD
-      ====================================== */
+       7. BUILD PAYLOAD
+    ====================================== */
       const payload = this.buildPayload.execute({
         product,
         categoryId,
@@ -118,17 +173,19 @@ export class PublishFravegaProduct {
         prices
       });
 
+      if (!payload) {
+        return {
+          status: 'failed',
+          message: 'PAYLOAD_BUILD_FAILED'
+        };
+      }
+
       /* ======================================
-         8. PUBLISH
-      ====================================== */
+       8. PUBLISH
+    ====================================== */
       const response = await this.createRepository.create(payload);
 
-      /* ======================================
-         9. MAP RESPONSE
-      ====================================== */
       if (!response?.success) {
-        console.error(`[FRAVEGA] SKU ${sku} FAILED`, response);
-
         return {
           status: 'failed',
           message: response?.message || 'FRAVEGA_API_ERROR',
@@ -137,16 +194,15 @@ export class PublishFravegaProduct {
         };
       }
 
-      console.log(`[FRAVEGA] SKU ${sku} SUCCESS`);
-
+      /* ======================================
+       SUCCESS
+    ====================================== */
       return {
         status: 'success',
         payload,
         response
       };
     } catch (error: any) {
-      console.error(`[FRAVEGA] SKU ${sku} EXCEPTION`, error);
-
       return {
         status: 'failed',
         message: error?.message || 'UNEXPECTED_ERROR'

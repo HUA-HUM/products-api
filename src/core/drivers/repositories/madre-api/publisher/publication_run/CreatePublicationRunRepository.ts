@@ -5,12 +5,7 @@ export class CreatePublicationRunRepository implements ICreatePublicationRunRepo
   constructor(private readonly http: MadreHttpClient) {}
 
   async createRun(data: { marketplaces: string[] }): Promise<{ run_id: string; status: string }> {
-    const response = (await this.http.post('/publication-runs', data)) as {
-      data: {
-        run_id: string;
-        status: string;
-      };
-    };
+    const response = await this.http.post('/publication-runs', data);
 
     return response.data;
   }
