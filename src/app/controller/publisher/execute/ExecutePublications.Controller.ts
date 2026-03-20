@@ -1,7 +1,7 @@
 import { Body, Controller, Post } from '@nestjs/common';
 import { ExecutePublicationsService } from 'src/app/services/publisher/execute/ExecutePublicationsService';
 
-@Controller('publications')
+@Controller('publications/execute')
 export class ExecutePublicationsController {
   constructor(private readonly service: ExecutePublicationsService) {}
 

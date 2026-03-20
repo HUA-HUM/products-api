@@ -50,11 +50,11 @@ import { CreateFravegaProductsRepository } from 'src/core/drivers/repositories/m
 import { CheckProductExistsRepository } from 'src/core/drivers/repositories/madre-api/Sync_items/CheckProductExists/CheckProductExistsRepository';
 import { CreateMegatoneProductsRepository } from 'src/core/drivers/repositories/marketplace-api/megatone/createProducts/CreateMegatoneProductsRepository';
 import { OpenAIAttributesExtractor } from 'src/app/driver/repository/opanAi/OpenAIAttributesExtractor';
+import { MatchCategoryRepository } from 'src/app/driver/repository/opanAi/MatchCategoryRepository';
 import { GetCategoryIdRepository } from 'src/core/drivers/repositories/marketplace-api/megatone/getCategoryId/MegatoneCategoryResponse';
 import { GetBrandIdRepository } from 'src/core/drivers/repositories/marketplace-api/megatone/getBrandId/GetBrandIdRepository';
-import { GetFravegaAttributesRepository } from 'src/core/drivers/repositories/marketplace-api/fravega/GetAtributtes/GetFravegaAttributesRepository';
 import { GetFravegaBrandIdRepository } from 'src/core/drivers/repositories/marketplace-api/fravega/GetBrandId/GetFravegaBrandIdRepository';
-import { GetFravegaCategoryIdRepository } from 'src/core/drivers/repositories/marketplace-api/fravega/GetCategoryId/GetFravegaCategoryIdRepository';
+import { GetFravegaCategoriesTreeRepository } from 'src/core/drivers/repositories/marketplace-api/fravega/GetCategoriesTree/GetFravegaCategoriesTreeRepository';
 
 /* ======================================
    OPENAI
@@ -128,6 +128,10 @@ import { GetFravegaCategoryIdRepository } from 'src/core/drivers/repositories/ma
       provide: 'IOpenAIAttributesExtractor',
       useClass: OpenAIAttributesExtractor
     },
+    {
+      provide: 'IMatchFravegaCategoryRepository',
+      useClass: MatchCategoryRepository
+    },
 
     /* ======================================
    MEGATONE CATEGORY
@@ -151,18 +155,9 @@ import { GetFravegaCategoryIdRepository } from 'src/core/drivers/repositories/ma
    FRAVEGA CATEGORY
 ====================================== */
     {
-      provide: 'IGetFravegaCategoryIdRepository',
-      useFactory: (http: MadreHttpClient) => new GetFravegaCategoryIdRepository(http),
-      inject: [MadreHttpClient]
-    },
-
-    /* ======================================
-   FRAVEGA ATTRIBUTES
-====================================== */
-    {
-      provide: 'IGetFravegaAttributesRepository',
-      useFactory: (http: MadreHttpClient) => new GetFravegaAttributesRepository(http),
-      inject: [MadreHttpClient]
+      provide: 'IGetFravegaCategoriesTreeRepository',
+      useFactory: (http: MarketplaceHttpClient) => new GetFravegaCategoriesTreeRepository(http),
+      inject: [MarketplaceHttpClient]
     },
 
     /* ======================================

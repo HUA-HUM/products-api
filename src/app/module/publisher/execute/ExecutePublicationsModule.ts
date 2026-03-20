@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 
 /* CONTROLLER & SERVICE */
 import { ExecutePublicationsService } from 'src/app/services/publisher/execute/ExecutePublicationsService';
+import { ExecutePublicationsCronService } from 'src/app/services/publisher/execute/ExecutePublicationsCronService';
 
 /* INTERACTORS */
 import { ExecutePublications } from 'src/core/interactors/publisher/execute/ExecutePublications';
@@ -21,6 +22,7 @@ import { ExecutePublicationsController } from 'src/app/controller/publisher/exec
   controllers: [ExecutePublicationsController],
   providers: [
     ExecutePublicationsService,
+    ExecutePublicationsCronService,
     ExecutePublications,
 
     /* HTTP */

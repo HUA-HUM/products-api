@@ -3,4 +3,8 @@ export type FravegaCategoryAttribute = {
   name: string;
   required: boolean;
   type: string;
+  valueOptions?: Array<{
+    t?: string;
+    v: string;
+  }>;
 };

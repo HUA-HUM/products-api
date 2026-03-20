@@ -1,4 +1,4 @@
-import { Inject } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { ICheckProductExistsRepository } from 'src/core/adapters/repositories/madre/Sync_items/CheckProductExists/ICheckProductExistsRepository';
 import { IGetMadreProductsRepository } from 'src/core/adapters/repositories/madre/products/get/IGetMadreProductsRepository';
 import { ICreateFravegaProductsRepository } from 'src/core/adapters/repositories/marketplace/fravega/CreateProduct/ICreateFravegaProductsRepository';
@@ -16,6 +16,7 @@ export type PublishResult = {
   response?: any;
 };
 
+@Injectable()
 export class PublishFravegaProduct {
   constructor(
     @Inject('ICheckProductExistsRepository')
@@ -37,7 +38,7 @@ export class PublishFravegaProduct {
   async execute(sku: string): Promise<PublishResult> {
     try {
       /* ======================================
-       1. EXISTS
+       1. EXISTS IN SYNC_ITEMS (true o false)
     ====================================== */
       const exists = await this.existsRepository.exists({
         marketplace: 'fravega',
@@ -115,9 +116,7 @@ export class PublishFravegaProduct {
       /* ======================================
        3. CATEGORY
     ====================================== */
-      const categoryId = await this.resolveCategory.execute({
-        categoryId: product.categoryId || (product as any).category_mla
-      });
+      const categoryId = await this.resolveCategory.execute(product);
 
       if (!categoryId) {
         return {

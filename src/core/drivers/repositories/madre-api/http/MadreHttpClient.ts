@@ -1,4 +1,6 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
+import * as http from 'node:http';
+import * as https from 'node:https';
 import { MadreHttpError } from './errors/MadreHttpError';
 
 export class MadreHttpClient {
@@ -14,6 +16,11 @@ export class MadreHttpClient {
     this.client = axios.create({
       baseURL,
       timeout: 30000,
+      // Some upstreams close idle keep-alive sockets aggressively. Using
+      // explicit non-keepalive agents avoids reusing a broken socket and
+      // prevents intermittent EPIPE/ECONNRESET on follow-up requests.
+      httpAgent: new http.Agent({ keepAlive: false }),
+      httpsAgent: new https.Agent({ keepAlive: false }),
       headers: {
         'Content-Type': 'application/json',
         Accept: '*/*'
@@ -48,6 +55,15 @@ export class MadreHttpClient {
     }
   }
 
+  async patch<T>(url: string, body: any): Promise<T> {
+    try {
+      const response = await this.client.patch<T>(url, body);
+      return response.data;
+    } catch (error) {
+      throw this.handleError('PATCH', url, error);
+    }
+  }
+
   private handleError(method: string, url: string, error: unknown): MadreHttpError {
     const err = error as AxiosError;
 
@@ -55,6 +71,15 @@ export class MadreHttpClient {
       return new MadreHttpError(err.response.status, err.response.data, `[MADRE ${method}] ${url}`);
     }
 
-    return new MadreHttpError(500, err.message, `[MADRE ${method}] ${url}`);
+    return new MadreHttpError(
+      500,
+      {
+        message: err.message,
+        code: err.code,
+        baseURL: this.client.defaults.baseURL,
+        url
+      },
+      `[MADRE ${method}] ${url}`
+    );
   }
 }

@@ -1,8 +1,11 @@
+import { Injectable } from '@nestjs/common';
+
 export type PublicationJob = {
   sku: string;
   marketplace: string;
 };
 
+@Injectable()
 export class CreatePublicationJobProcess {
   execute(skus: string[], marketplaces: string[]): PublicationJob[] {
     const jobs: PublicationJob[] = [];

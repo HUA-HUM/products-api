@@ -1,6 +1,7 @@
-import { Inject } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { ISendPublicationJobsRepository } from 'src/core/adapters/repositories/madre/publisher/publication_job/SendJobProcess/ISendPublicationJobsRepository';
 
+@Injectable()
 export class SendPublicationJobs {
   constructor(
     @Inject('ISendPublicationJobsRepository')

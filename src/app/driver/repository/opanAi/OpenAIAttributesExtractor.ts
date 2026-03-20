@@ -50,13 +50,22 @@ Devuelve SOLO JSON válido:
       temperature: 0
     });
 
-    const content = response.choices[0]?.message?.content || '{}';
+    const rawContent = response.choices[0]?.message?.content || '{}';
+    const content = this.extractJson(rawContent);
 
     try {
       return JSON.parse(content);
     } catch {
-      console.error('OpenAI JSON parse error:', content);
+      console.error('OpenAI JSON parse error:', rawContent);
       return {};
     }
+  }
+
+  private extractJson(content: string): string {
+    return content
+      .replace(/^```json\s*/i, '')
+      .replace(/^```\s*/i, '')
+      .replace(/\s*```$/i, '')
+      .trim();
   }
 }

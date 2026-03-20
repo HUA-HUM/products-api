@@ -1,8 +1,10 @@
+import { Injectable } from '@nestjs/common';
 import { CreatePublicationRun } from '../publication_run/CreatePublicationRun';
 import { GetMarketplaceFavoriteSkus } from '../publication_job/getSkusFromFolders/GetMarketplaceFavoriteSkus';
 import { CreatePublicationJobProcess } from '../publication_job/CreatePublicationJob/CreatePublicationJobProcess';
 import { SendPublicationJobs } from '../publication_job/sendJobProcess/SendPublicationJobs';
 
+@Injectable()
 export class ExecutePublications {
   constructor(
     private readonly createRun: CreatePublicationRun,
@@ -12,6 +14,7 @@ export class ExecutePublications {
   ) {}
 
   async execute(params: { marketplaces: string[]; folderId: number }) {
+    console.log('acaa');
     const { marketplaces, folderId } = params;
 
     /* ======================================
@@ -31,9 +34,12 @@ export class ExecutePublications {
     const skus: string[] = [];
     let page = 1;
     const limit = 50;
+    let totalPages = 1;
 
-    while (true) {
-      const pageSkus = await this.getSkus.execute(folderId, page, limit);
+    while (page <= totalPages) {
+      const pageResult = await this.getSkus.execute(folderId, page, limit);
+      const pageSkus = pageResult.items;
+      totalPages = pageResult.pagination.totalPages;
 
       if (!pageSkus.length) break;
 
@@ -68,7 +74,7 @@ export class ExecutePublications {
       runId,
       totalSkus: skus.length,
       totalJobs: jobs.length,
-      jobsPreview: jobs.slice(0, 10) // 👈 para no romper logs
+      jobsPreview: jobs.slice(0, 10)
     };
   }
 }

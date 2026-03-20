@@ -20,9 +20,8 @@ export class BuildFravegaPayload {
           /* ======================================
              IDENTIFICACIÓN
           ====================================== */
-          ean: product.sku,
+          ean: '00000000',
           refId: product.sku,
-          sku: product.sku,
 
           /* ======================================
              TITLE
@@ -101,7 +100,7 @@ export class BuildFravegaPayload {
       return [
         {
           type: 'url',
-          url: 'https://via.placeholder.com/500'
+          url: 'http://via.placeholder.com/500.jpg'
         }
       ];
     }
@@ -111,8 +110,22 @@ export class BuildFravegaPayload {
       .slice(0, 5)
       .map(img => ({
         type: 'url',
-        url: img.url
+        url: this.normalizeImageUrl(img.url)
       }));
+  }
+
+  private normalizeImageUrl(url: string): string {
+    try {
+      const parsed = new URL(url);
+
+      if (parsed.hostname === 'http2.mlstatic.com') {
+        parsed.protocol = 'http:';
+      }
+
+      return parsed.toString();
+    } catch {
+      return url;
+    }
   }
 
   /* ======================================
