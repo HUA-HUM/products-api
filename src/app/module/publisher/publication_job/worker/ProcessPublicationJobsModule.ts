@@ -5,6 +5,7 @@ import { Module } from '@nestjs/common';
 ====================================== */
 import { ProcessPublicationJobsController } from 'src/app/controller/publisher/publication_job/worker/ProcessPublicationJobs.Controller';
 import { ProcessPublicationJobsService } from 'src/app/services/publisher/publication_job/worker/ProcessPublicationJobsService';
+import { ProcessPublicationJobsCronService } from 'src/app/services/publisher/publication_job/worker/ProcessPublicationJobsCronService';
 
 /* ======================================
    HTTP CLIENTS
@@ -67,6 +68,7 @@ import { GetFravegaCategoriesTreeRepository } from 'src/core/drivers/repositorie
        CORE
     ====================================== */
     ProcessPublicationJobsService,
+    ProcessPublicationJobsCronService,
     ProcessPublicationJobs,
 
     /* ======================================
