@@ -46,10 +46,7 @@ export class PublishFravegaProduct {
       });
 
       if (exists?.exists) {
-        return {
-          status: 'skipped',
-          message: 'PRODUCT_ALREADY_EXISTS'
-        };
+        return this.buildValidationResult('skipped', 'PRODUCT_ALREADY_EXISTS', sku, 'exists_check');
       }
 
       /* ======================================
@@ -58,20 +55,22 @@ export class PublishFravegaProduct {
       const product = await this.madreRepository.getBySku(sku);
 
       if (!product) {
-        return {
-          status: 'failed',
-          message: 'PRODUCT_NOT_FOUND_IN_MADRE'
-        };
+        return this.buildValidationResult('failed', 'PRODUCT_NOT_FOUND_IN_MADRE', sku, 'load_product');
       }
 
       /* ======================================
        2.5 MELI STATUS
     ====================================== */
       if (product.meliStatus !== 'active') {
-        return {
-          status: 'skipped',
-          message: `MELI_STATUS_${product.meliStatus?.toUpperCase() || 'UNKNOWN'}`
-        };
+        return this.buildValidationResult(
+          'skipped',
+          `MELI_STATUS_${product.meliStatus?.toUpperCase() || 'UNKNOWN'}`,
+          sku,
+          'meli_status_validation',
+          {
+            meliStatus: product.meliStatus ?? null
+          }
+        );
       }
 
       /* ======================================
@@ -79,38 +78,30 @@ export class PublishFravegaProduct {
     ====================================== */
 
       if (!product.price || product.price <= 0) {
-        return {
-          status: 'failed',
-          message: 'INVALID_PRICE'
-        };
+        return this.buildValidationResult('failed', 'INVALID_PRICE', sku, 'base_validation', {
+          price: product.price ?? null
+        });
       }
 
       if (!product.stock || product.stock <= 0) {
-        return {
-          status: 'skipped',
-          message: 'OUT_OF_STOCK'
-        };
+        return this.buildValidationResult('skipped', 'OUT_OF_STOCK', sku, 'base_validation', {
+          stock: product.stock ?? null
+        });
       }
 
       if (!product.attributes?.brand) {
-        return {
-          status: 'skipped',
-          message: 'MISSING_BRAND'
-        };
+        return this.buildValidationResult('skipped', 'MISSING_BRAND', sku, 'base_validation');
       }
 
       if (!product.title || !product.description) {
-        return {
-          status: 'skipped',
-          message: 'MISSING_TITLE_OR_DESCRIPTION'
-        };
+        return this.buildValidationResult('skipped', 'MISSING_TITLE_OR_DESCRIPTION', sku, 'base_validation', {
+          hasTitle: Boolean(product.title),
+          hasDescription: Boolean(product.description)
+        });
       }
 
       if (!product.images || product.images.length === 0) {
-        return {
-          status: 'skipped',
-          message: 'MISSING_IMAGES'
-        };
+        return this.buildValidationResult('skipped', 'MISSING_IMAGES', sku, 'base_validation');
       }
 
       /* ======================================
@@ -119,10 +110,7 @@ export class PublishFravegaProduct {
       const categoryId = await this.resolveCategory.execute(product);
 
       if (!categoryId) {
-        return {
-          status: 'skipped',
-          message: 'CATEGORY_NOT_FOUND'
-        };
+        return this.buildValidationResult('skipped', 'CATEGORY_NOT_FOUND', sku, 'category_resolution');
       }
 
       /* ======================================
@@ -131,10 +119,9 @@ export class PublishFravegaProduct {
       const brandId = await this.resolveBrand.execute(product);
 
       if (!brandId) {
-        return {
-          status: 'skipped',
-          message: 'BRAND_NOT_FOUND'
-        };
+        return this.buildValidationResult('skipped', 'BRAND_NOT_FOUND', sku, 'brand_resolution', {
+          brand: product.attributes?.brand ?? null
+        });
       }
 
       /* ======================================
@@ -143,10 +130,15 @@ export class PublishFravegaProduct {
       const attributes = await this.resolveAttributes.execute(categoryId, product);
 
       if (!attributes) {
-        return {
-          status: 'skipped',
-          message: 'MISSING_REQUIRED_ATTRIBUTES'
-        };
+        return this.buildValidationResult(
+          'skipped',
+          'MISSING_REQUIRED_ATTRIBUTES',
+          sku,
+          'attributes_resolution',
+          {
+            categoryId
+          }
+        );
       }
 
       /* ======================================
@@ -155,10 +147,9 @@ export class PublishFravegaProduct {
       const prices = this.resolvePrices.execute(product.price);
 
       if (!prices) {
-        return {
-          status: 'failed',
-          message: 'PRICE_MAPPING_FAILED'
-        };
+        return this.buildValidationResult('failed', 'PRICE_MAPPING_FAILED', sku, 'price_resolution', {
+          price: product.price ?? null
+        });
       }
 
       /* ======================================
@@ -173,10 +164,7 @@ export class PublishFravegaProduct {
       });
 
       if (!payload) {
-        return {
-          status: 'failed',
-          message: 'PAYLOAD_BUILD_FAILED'
-        };
+        return this.buildValidationResult('failed', 'PAYLOAD_BUILD_FAILED', sku, 'payload_build');
       }
 
       /* ======================================
@@ -224,11 +212,31 @@ export class PublishFravegaProduct {
         response
       };
     } catch (error: any) {
-      return {
-        status: 'failed',
-        message: error?.message || 'UNEXPECTED_ERROR'
-      };
+      return this.buildValidationResult('failed', error?.message || 'UNEXPECTED_ERROR', sku, 'unexpected_error');
     }
+  }
+
+  private buildValidationResult(
+    status: 'success' | 'failed' | 'skipped',
+    message: string,
+    sku: string,
+    stage: string,
+    details?: Record<string, unknown>
+  ): PublishResult {
+    const context = {
+      marketplace: 'fravega',
+      sku,
+      stage,
+      reason: message,
+      details: details ?? null
+    };
+
+    return {
+      status,
+      message,
+      payload: context,
+      response: context
+    };
   }
 
   private extractFravegaErrors(response: any): Array<{ message?: string; field?: string }> {

@@ -41,10 +41,7 @@ export class PublishMegatoneProduct {
     });
 
     if (existsResponse.exists) {
-      return {
-        status: 'skipped',
-        message: 'PRODUCT_ALREADY_EXISTS'
-      };
+      return this.buildValidationResult('skipped', 'PRODUCT_ALREADY_EXISTS', sku, 'exists_check');
     }
 
     /* ======================================
@@ -53,20 +50,22 @@ export class PublishMegatoneProduct {
     const product = await this.madreRepository.getBySku(sku);
 
     if (!product) {
-      return {
-        status: 'failed',
-        message: 'PRODUCT_NOT_FOUND_IN_MADRE'
-      };
+      return this.buildValidationResult('failed', 'PRODUCT_NOT_FOUND_IN_MADRE', sku, 'load_product');
     }
 
     /* ======================================
      2.5 MELI STATUS
   ====================================== */
     if (product.meliStatus !== 'active') {
-      return {
-        status: 'skipped',
-        message: `MELI_STATUS_${product.meliStatus?.toUpperCase() || 'UNKNOWN'}`
-      };
+      return this.buildValidationResult(
+        'skipped',
+        `MELI_STATUS_${product.meliStatus?.toUpperCase() || 'UNKNOWN'}`,
+        sku,
+        'meli_status_validation',
+        {
+          meliStatus: product.meliStatus ?? null
+        }
+      );
     }
 
     /* ======================================
@@ -74,24 +73,19 @@ export class PublishMegatoneProduct {
   ====================================== */
 
     if (!product.price || product.price <= 0) {
-      return {
-        status: 'failed',
-        message: 'INVALID_PRICE'
-      };
+      return this.buildValidationResult('failed', 'INVALID_PRICE', sku, 'base_validation', {
+        price: product.price ?? null
+      });
     }
 
     if (!product.stock || product.stock <= 0) {
-      return {
-        status: 'skipped',
-        message: 'OUT_OF_STOCK'
-      };
+      return this.buildValidationResult('skipped', 'OUT_OF_STOCK', sku, 'base_validation', {
+        stock: product.stock ?? null
+      });
     }
 
     if (!product.attributes?.brand) {
-      return {
-        status: 'skipped',
-        message: 'MISSING_BRAND'
-      };
+      return this.buildValidationResult('skipped', 'MISSING_BRAND', sku, 'base_validation');
     }
 
     /* ======================================
@@ -103,10 +97,9 @@ export class PublishMegatoneProduct {
     });
 
     if (!categoryId) {
-      return {
-        status: 'skipped',
-        message: 'CATEGORY_NOT_FOUND'
-      };
+      return this.buildValidationResult('skipped', 'CATEGORY_NOT_FOUND', sku, 'category_resolution', {
+        categoryId: product.categoryId ?? null
+      });
     }
 
     /* ======================================
@@ -115,10 +108,9 @@ export class PublishMegatoneProduct {
     const brandId = await this.resolveBrand.execute(product.attributes.brand);
 
     if (!brandId) {
-      return {
-        status: 'skipped',
-        message: 'BRAND_NOT_FOUND'
-      };
+      return this.buildValidationResult('skipped', 'BRAND_NOT_FOUND', sku, 'brand_resolution', {
+        brand: product.attributes?.brand ?? null
+      });
     }
 
     /* ======================================
@@ -127,10 +119,9 @@ export class PublishMegatoneProduct {
     const prices = this.resolvePrices.execute(product.price);
 
     if (!prices) {
-      return {
-        status: 'failed',
-        message: 'PRICE_MAPPING_FAILED'
-      };
+      return this.buildValidationResult('failed', 'PRICE_MAPPING_FAILED', sku, 'price_resolution', {
+        price: product.price ?? null
+      });
     }
 
     /* ======================================
@@ -144,10 +135,7 @@ export class PublishMegatoneProduct {
     });
 
     if (!payload) {
-      return {
-        status: 'failed',
-        message: 'PAYLOAD_BUILD_FAILED'
-      };
+      return this.buildValidationResult('failed', 'PAYLOAD_BUILD_FAILED', sku, 'payload_build');
     }
 
     /* ======================================
@@ -199,6 +187,29 @@ export class PublishMegatoneProduct {
       message: errorMessage || 'MEGATONE_UNKNOWN_ERROR',
       payload,
       response
+    };
+  }
+
+  private buildValidationResult(
+    status: 'success' | 'failed' | 'skipped',
+    message: string,
+    sku: string,
+    stage: string,
+    details?: Record<string, unknown>
+  ): PublishResult {
+    const context = {
+      marketplace: 'megatone',
+      sku,
+      stage,
+      reason: message,
+      details: details ?? null
+    };
+
+    return {
+      status,
+      message,
+      payload: context,
+      response: context
     };
   }
 }
