@@ -193,6 +193,28 @@ export class PublishFravegaProduct {
         };
       }
 
+      const fravegaErrors = this.extractFravegaErrors(response);
+
+      if (fravegaErrors.length > 0) {
+        const errorMessage = fravegaErrors.map(error => error.message).filter(Boolean).join(' | ') || 'FRAVEGA_API_ERROR';
+
+        if (this.isAlreadyExistsError(errorMessage)) {
+          return {
+            status: 'skipped',
+            message: 'ALREADY_EXISTS_IN_FRAVEGA',
+            payload,
+            response
+          };
+        }
+
+        return {
+          status: 'failed',
+          message: errorMessage,
+          payload,
+          response
+        };
+      }
+
       /* ======================================
        SUCCESS
     ====================================== */
@@ -207,5 +229,14 @@ export class PublishFravegaProduct {
         message: error?.message || 'UNEXPECTED_ERROR'
       };
     }
+  }
+
+  private extractFravegaErrors(response: any): Array<{ message?: string; field?: string }> {
+    const errors = response?.data?.error;
+    return Array.isArray(errors) ? errors : [];
+  }
+
+  private isAlreadyExistsError(message: string): boolean {
+    return message.toLowerCase().includes('ya existe un item con el codigo de referencia');
   }
 }

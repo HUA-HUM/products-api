@@ -3,6 +3,7 @@ import { ProductSyncMarketplace } from 'src/core/entitis/madre-api/product-sync/
 import { MarketplaceImportStrategy } from '../MarketplaceImportStrategy';
 import { MegatoneImportStrategy } from '../strategies/MegatoneImportStrategy';
 import { OnCityImportStrategy } from '../strategies/OnCityImportStrategy';
+import { FravegaImportStrategy } from '../strategies/FravegaImportStrategy';
 
 @Injectable()
 export class MarketplaceImportStrategyResolver {
@@ -10,9 +11,10 @@ export class MarketplaceImportStrategyResolver {
 
   constructor(
     private readonly megatoneStrategy: MegatoneImportStrategy,
-    private readonly onCityStrategy: OnCityImportStrategy
+    private readonly onCityStrategy: OnCityImportStrategy,
+    private readonly fravegaStrategy: FravegaImportStrategy
   ) {
-    this.strategies = [this.megatoneStrategy, this.onCityStrategy];
+    this.strategies = [this.megatoneStrategy, this.onCityStrategy, this.fravegaStrategy];
   }
 
   resolve(marketplace: ProductSyncMarketplace): MarketplaceImportStrategy {

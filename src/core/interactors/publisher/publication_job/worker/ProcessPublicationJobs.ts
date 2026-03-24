@@ -54,7 +54,9 @@ export class ProcessPublicationJobs {
           const updated = await this.tryUpdateJob(job.id, this.buildUpdatePayload(result));
 
           if (updated) {
-            console.log(`[WORKER] Job ${job.id} ${result.status.toUpperCase()}`);
+            console.log(
+              `[WORKER] Job ${job.id} ${result.status.toUpperCase()}${result.message ? ` | ${result.message}` : ''}`
+            );
           }
           continue;
         }
@@ -97,9 +99,9 @@ export class ProcessPublicationJobs {
   }) {
     return {
       status: result.status === 'failed' ? 'fail' : result.status,
-      error_message: result.status === 'failed' ? result.message ?? null : null,
+      error_message: result.status === 'success' ? null : result.message ?? null,
       request_payload: result.payload ?? null,
-      response_payload: result.response ?? null,
+      response_payload: result.response ?? (result.message ? { reason: result.message, status: result.status } : null),
       marketplace_item_id: this.resolveMarketplaceItemId(result.response)
     };
   }
