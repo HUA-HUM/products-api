@@ -51,10 +51,12 @@ export class ProcessPublicationJobs {
            SUCCESS / SKIPPED
         ====================================== */
         if (result.status === 'success' || result.status === 'skipped') {
-          const updated = await this.tryUpdateJob(job.id, this.buildUpdatePayload(result));
+          const updated = await this.tryUpdateJob(job.id, this.buildUpdatePayload(job, result));
 
           if (updated) {
-            console.log(`[WORKER] Job ${job.id} ${result.status.toUpperCase()}`);
+            console.log(
+              `[WORKER] Job ${job.id} ${result.status.toUpperCase()}${result.message ? ` | ${result.message}` : ''}`
+            );
           }
           continue;
         }
@@ -62,7 +64,7 @@ export class ProcessPublicationJobs {
         /* ======================================
            FAILED (controlado)
         ====================================== */
-        await this.tryUpdateJob(job.id, this.buildUpdatePayload(result));
+        await this.tryUpdateJob(job.id, this.buildUpdatePayload(job, result));
 
         console.error(`[WORKER] Job ${job.id} FAILED`, result.message);
       } catch (error: any) {
@@ -70,7 +72,7 @@ export class ProcessPublicationJobs {
 
         await this.tryUpdateJob(
           job.id,
-          this.buildUpdatePayload({
+          this.buildUpdatePayload(job, {
             status: 'failed',
             message: error?.message || 'Unknown error'
           })
@@ -89,17 +91,32 @@ export class ProcessPublicationJobs {
     }
   }
 
-  private buildUpdatePayload(result: {
-    status: 'success' | 'failed' | 'skipped';
-    message?: string;
-    payload?: any;
-    response?: any;
-  }) {
+  private buildUpdatePayload(
+    job: {
+      id: number;
+      sku: string;
+      marketplace: string;
+    },
+    result: {
+      status: 'success' | 'failed' | 'skipped';
+      message?: string;
+      payload?: any;
+      response?: any;
+    }
+  ) {
+    const fallbackContext = {
+      jobId: job.id,
+      sku: job.sku,
+      marketplace: job.marketplace,
+      status: result.status,
+      reason: result.message ?? null
+    };
+
     return {
       status: result.status === 'failed' ? 'fail' : result.status,
-      error_message: result.status === 'failed' ? result.message ?? null : null,
-      request_payload: result.payload ?? null,
-      response_payload: result.response ?? null,
+      error_message: result.status === 'success' ? null : result.message ?? null,
+      request_payload: result.payload ?? fallbackContext,
+      response_payload: result.response ?? fallbackContext,
       marketplace_item_id: this.resolveMarketplaceItemId(result.response)
     };
   }
