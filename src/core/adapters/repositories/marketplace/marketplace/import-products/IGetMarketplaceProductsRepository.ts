@@ -10,6 +10,7 @@ export interface IGetMarketplaceProductsRepository {
       price: number;
       stock: number;
       status: string;
+      raw?: unknown;
     }[];
     hasNext: boolean;
     nextOffset?: number;
