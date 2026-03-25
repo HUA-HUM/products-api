@@ -67,7 +67,7 @@ export class ImportMarketplaceProducts {
             price: item.price,
             stock: item.stock,
             status: strategy.mapStatus(item.status),
-            raw: item
+            raw: item.raw ?? item
           }))
         };
 

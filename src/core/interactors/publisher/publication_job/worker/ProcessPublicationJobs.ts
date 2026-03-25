@@ -18,7 +18,7 @@ export class ProcessPublicationJobs {
   ) {}
 
   async execute(): Promise<void> {
-    const jobs = await this.claimRepository.claim(10);
+    const jobs = await this.claimRepository.claim(80);
 
     if (!jobs.length) {
       console.log('[WORKER] No jobs to process');
@@ -114,7 +114,7 @@ export class ProcessPublicationJobs {
 
     return {
       status: result.status === 'failed' ? 'fail' : result.status,
-      error_message: result.status === 'success' ? null : result.message ?? null,
+      error_message: result.status === 'success' ? null : (result.message ?? null),
       request_payload: result.payload ?? fallbackContext,
       response_payload: result.response ?? fallbackContext,
       marketplace_item_id: this.resolveMarketplaceItemId(result.response)

@@ -10,6 +10,8 @@ export type MegatoneCreateProductsResponse = {
 export type MegatoneCreateProductItem = {
   skuSeller: string;
   status: string; // "PUBLISHED" | "SKIPPED" | "FAILED"
+  marketSku?: string;
+  publicationId?: number;
   errors?: MegatoneError[];
 };
 

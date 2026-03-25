@@ -22,7 +22,8 @@ export class GetFravegaProductsAdapter implements IGetMarketplaceProductsReposit
         marketSku: item.sku ?? null,
         price: item.price?.sale ?? item.price?.list ?? 0,
         stock: item.stock?.quantity ?? 0,
-        status: item.status?.code ?? item.itemState ?? 'unknown'
+        status: item.status?.code ?? item.itemState ?? 'unknown',
+        raw: item
       })),
       hasNext: computedHasNext,
       nextOffset: computedHasNext ? offset + limit : undefined

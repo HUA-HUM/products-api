@@ -14,6 +14,7 @@ export interface MarketplaceImportStrategy {
       price: number;
       stock: number;
       status: string;
+      raw?: unknown;
     }[];
     hasNext: boolean;
     nextOffset?: number;

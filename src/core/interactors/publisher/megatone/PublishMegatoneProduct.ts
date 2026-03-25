@@ -154,10 +154,13 @@ export class PublishMegatoneProduct {
       };
     }
 
+    const itemStatus = String(item.status || '').toUpperCase();
+    const errorMessage = this.extractMegatoneErrorMessage(item);
+
     /* ======================================
      SUCCESS
   ====================================== */
-    if (!item.errors || item.errors.length === 0) {
+    if (this.isMegatonePublished(response, itemStatus, item.errors)) {
       return {
         status: 'success',
         payload,
@@ -166,14 +169,12 @@ export class PublishMegatoneProduct {
     }
 
     /* ======================================
-     SKIP: YA EXISTE
+     SKIPPED
   ====================================== */
-    const errorMessage = item.errors?.[0]?.message || '';
-
-    if (errorMessage.toLowerCase().includes('ya existe')) {
+    if (this.isMegatoneSkipped(response, itemStatus, errorMessage)) {
       return {
         status: 'skipped',
-        message: 'ALREADY_EXISTS_IN_MEGATONE',
+        message: this.resolveMegatoneSkippedMessage(errorMessage, itemStatus),
         payload,
         response
       };
@@ -184,7 +185,7 @@ export class PublishMegatoneProduct {
   ====================================== */
     return {
       status: 'failed',
-      message: errorMessage || 'MEGATONE_UNKNOWN_ERROR',
+      message: errorMessage || this.resolveMegatoneFailedMessage(response, itemStatus),
       payload,
       response
     };
@@ -211,5 +212,81 @@ export class PublishMegatoneProduct {
       payload: context,
       response: context
     };
+  }
+
+  private extractMegatoneErrorMessage(item: { errors?: Array<{ message?: string }> }): string {
+    return (
+      item.errors
+        ?.map(error => error?.message)
+        .filter((message): message is string => Boolean(message))
+        .join(' | ') || ''
+    );
+  }
+
+  private isMegatonePublished(
+    response: { published?: number; failed?: number; skipped?: number },
+    itemStatus: string,
+    errors?: Array<{ message?: string }>
+  ): boolean {
+    if (errors && errors.length > 0) {
+      return false;
+    }
+
+    if (itemStatus === 'PUBLISHED') {
+      return true;
+    }
+
+    return Number(response?.published ?? 0) > 0 && Number(response?.failed ?? 0) === 0 && Number(response?.skipped ?? 0) === 0;
+  }
+
+  private isMegatoneSkipped(
+    response: { skipped?: number },
+    itemStatus: string,
+    errorMessage: string
+  ): boolean {
+    if (itemStatus === 'SKIPPED') {
+      return true;
+    }
+
+    if (errorMessage && this.isAlreadyExistsError(errorMessage)) {
+      return true;
+    }
+
+    return Number(response?.skipped ?? 0) > 0;
+  }
+
+  private resolveMegatoneSkippedMessage(errorMessage: string, itemStatus: string): string {
+    if (errorMessage && this.isAlreadyExistsError(errorMessage)) {
+      return 'ALREADY_EXISTS_IN_MEGATONE';
+    }
+
+    if (errorMessage) {
+      return errorMessage;
+    }
+
+    if (itemStatus === 'SKIPPED') {
+      return 'MEGATONE_ITEM_SKIPPED';
+    }
+
+    return 'MEGATONE_SKIPPED';
+  }
+
+  private resolveMegatoneFailedMessage(
+    response: { status?: string; failed?: number },
+    itemStatus: string
+  ): string {
+    if (itemStatus === 'FAILED') {
+      return 'MEGATONE_ITEM_FAILED';
+    }
+
+    if (Number(response?.failed ?? 0) > 0) {
+      return 'MEGATONE_BATCH_FAILED';
+    }
+
+    return response?.status ? `MEGATONE_${String(response.status).toUpperCase()}` : 'MEGATONE_UNKNOWN_ERROR';
+  }
+
+  private isAlreadyExistsError(message: string): boolean {
+    return message.toLowerCase().includes('ya existe');
   }
 }
