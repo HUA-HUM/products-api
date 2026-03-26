@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ProcessPublicationJobsService } from './ProcessPublicationJobsService';
 
-const SEVEN_MINUTES_MS = 7 * 60 * 1000;
+const FIVE_MINUTES_MS = 5 * 60 * 1000;
 
 @Injectable()
 export class ProcessPublicationJobsCronService implements OnModuleInit, OnModuleDestroy {
@@ -16,7 +16,7 @@ export class ProcessPublicationJobsCronService implements OnModuleInit, OnModule
 
     this.timer = setInterval(() => {
       void this.runScheduled();
-    }, SEVEN_MINUTES_MS);
+    }, FIVE_MINUTES_MS);
   }
 
   onModuleDestroy(): void {
