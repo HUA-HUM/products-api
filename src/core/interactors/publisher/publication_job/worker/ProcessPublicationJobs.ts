@@ -18,7 +18,12 @@ export class ProcessPublicationJobs {
   ) {}
 
   async execute(): Promise<void> {
-    const jobs = await this.claimRepository.claim(80);
+    const claimResult = await this.claimRepository.claim(80);
+    const jobs = claimResult.items ?? [];
+
+    console.log(
+      `[WORKER] Claim result | requested=${claimResult.requested} | limit=${claimResult.limit} | claimed=${claimResult.claimed}`
+    );
 
     if (!jobs.length) {
       console.log('[WORKER] No jobs to process');
