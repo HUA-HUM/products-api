@@ -7,17 +7,31 @@ export function mapFravegaStatus(status?: string): ProductSyncStatus {
 
   switch (normalized) {
     case 'active':
+    case 'approved':
+    case 'published':
       return 'ACTIVE';
+    case 'pending_approval':
+    case 'under_review':
+    case 'en_revision':
+    case 'review':
+      return 'EN_REVISION';
     case 'incomplete':
-      return 'PENDING';
     case 'editing':
+    case 'draft':
+    case 'pending':
       return 'PENDING';
     case 'paused':
-      return 'PAUSED';
     case 'inactive':
+    case 'inactivo':
       return 'PAUSED';
     case 'deleted':
+    case 'eliminado':
+    case 'removed':
       return 'DELETED';
+    case 'rejected':
+    case 'failed':
+    case 'error':
+      return 'ERROR';
     default:
       return 'PENDING';
   }

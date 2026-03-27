@@ -11,11 +11,20 @@ export type ImportProgress = {
   itemsFailed: number;
 };
 
+type SendBulkResult =
+  | { success: true }
+  | {
+      success: false;
+      errorMessage: string;
+      errorDetails?: unknown;
+    };
+
 @Injectable()
 export class ImportMarketplaceProducts {
   private readonly logger = new Logger(ImportMarketplaceProducts.name);
 
-  private readonly BATCH_LIMIT = 50;
+  private readonly FETCH_BATCH_LIMIT = 50;
+  private readonly MADRE_BULK_MAX_ITEMS = 10;
   private readonly MAX_RETRIES = 3;
   private readonly RETRY_DELAY_MS = 1000;
 
@@ -47,7 +56,7 @@ export class ImportMarketplaceProducts {
 
     try {
       while (hasNext) {
-        const response = await strategy.getProducts(this.BATCH_LIMIT, offset);
+        const response = await strategy.getProducts(this.FETCH_BATCH_LIMIT, offset);
 
         if (!response || !Array.isArray(response.items)) {
           throw new Error(`[${marketplace}] Invalid response`);
@@ -55,42 +64,54 @@ export class ImportMarketplaceProducts {
 
         if (response.items.length === 0) break;
 
-        totalBatches++;
         totalItems += response.items.length;
 
-        const payload: BulkMarketplaceProductsDto = {
-          marketplace,
-          items: response.items.map(item => ({
-            externalId: String(item.publicationId),
-            sellerSku: item.sellerSku,
-            marketplaceSku: item.marketSku ?? null,
-            price: item.price,
-            stock: item.stock,
-            status: strategy.mapStatus(item.status),
-            raw: item.raw ?? item
-          }))
-        };
+        const mappedItems = response.items.map(item => ({
+          externalId: String(item.publicationId),
+          sellerSku: item.sellerSku,
+          marketplaceSku: item.marketSku ?? null,
+          price: item.price,
+          stock: item.stock,
+          status: strategy.mapStatus(item.status),
+          raw: item.raw ?? item
+        }));
 
-        const success = await this.sendWithRetry(payload);
+        const payloadBatches = this.chunkItems(mappedItems, this.MADRE_BULK_MAX_ITEMS);
 
-        if (!success) {
-          failedItems += payload.items.length;
+        for (const payloadItems of payloadBatches) {
+          totalBatches++;
+
+          const payload: BulkMarketplaceProductsDto = {
+            marketplace,
+            items: payloadItems
+          };
+
+          const sendResult = await this.sendWithRetry(payload);
+          const success = sendResult.success;
+
+          if (!success) {
+            failedItems += payload.items.length;
+            this.logger.error(
+              `[IMPORT][${marketplace}] bulk send failed | batch=${totalBatches} | items=${payload.items.length} | reason=${sendResult.errorMessage}`,
+              sendResult.errorDetails ? JSON.stringify(sendResult.errorDetails) : undefined
+            );
+          }
+
+          await this.syncRuns.progress(runId, {
+            batches: 1,
+            items: payload.items.length,
+            failed: success ? 0 : payload.items.length
+          });
+
+          onProgress?.(
+            {
+              batchesProcessed: totalBatches,
+              itemsProcessed: totalItems,
+              itemsFailed: failedItems
+            },
+            `Batch ${totalBatches} | items=${payload.items.length} | failed=${success ? 0 : payload.items.length}${success ? '' : ` | reason=${sendResult.errorMessage}`}`
+          );
         }
-
-        await this.syncRuns.progress(runId, {
-          batches: 1,
-          items: payload.items.length,
-          failed: success ? 0 : payload.items.length
-        });
-
-        onProgress?.(
-          {
-            batchesProcessed: totalBatches,
-            itemsProcessed: totalItems,
-            itemsFailed: failedItems
-          },
-          `Batch ${totalBatches} | items=${payload.items.length} | failed=${success ? 0 : payload.items.length}`
-        );
 
         hasNext = response.hasNext === true;
         if (hasNext) {
@@ -110,16 +131,48 @@ export class ImportMarketplaceProducts {
     }
   }
 
-  private async sendWithRetry(payload: BulkMarketplaceProductsDto): Promise<boolean> {
+  private async sendWithRetry(payload: BulkMarketplaceProductsDto): Promise<SendBulkResult> {
+    let lastErrorMessage = 'UNKNOWN_BULK_ERROR';
+    let lastErrorDetails: unknown;
+
     for (let attempt = 1; attempt <= this.MAX_RETRIES; attempt++) {
       try {
         await this.sendBulkProductSync.execute(payload);
-        return true;
-      } catch {
-        if (attempt === this.MAX_RETRIES) return false;
+        return { success: true };
+      } catch (error: any) {
+        lastErrorMessage = error?.message || 'UNKNOWN_BULK_ERROR';
+        lastErrorDetails = error?.response ?? error?.data ?? error;
+
+        this.logger.warn(
+          `[IMPORT][${payload.marketplace}] bulk send retry ${attempt}/${this.MAX_RETRIES} failed | ${lastErrorMessage}`
+        );
+
+        if (attempt === this.MAX_RETRIES) {
+          return {
+            success: false,
+            errorMessage: lastErrorMessage,
+            errorDetails: lastErrorDetails
+          };
+        }
+
         await new Promise(res => setTimeout(res, this.RETRY_DELAY_MS));
       }
     }
-    return false;
+
+    return {
+      success: false,
+      errorMessage: lastErrorMessage,
+      errorDetails: lastErrorDetails
+    };
+  }
+
+  private chunkItems<T>(items: T[], size: number): T[][] {
+    const chunks: T[][] = [];
+
+    for (let index = 0; index < items.length; index += size) {
+      chunks.push(items.slice(index, index + size));
+    }
+
+    return chunks;
   }
 }
