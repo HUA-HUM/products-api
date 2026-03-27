@@ -7,15 +7,27 @@ export function mapMegatoneStatus(status?: string): ProductSyncStatus {
 
   switch (normalized) {
     case 'activo':
+    case 'active':
       return 'ACTIVE';
 
     case 'en_revision':
-      return 'PENDING';
+    case 'under_review':
+      return 'EN_REVISION';
 
     case 'pausado':
+    case 'paused':
+    case 'inactive':
+    case 'inactivo':
       return 'PAUSED';
 
     case 'pendiente_activacion':
+    case 'pending_activation':
+    case 'pending':
+      return 'PENDING';
+
+    case 'deleted':
+    case 'eliminado':
+    case 'removed':
       return 'DELETED';
 
     default:
