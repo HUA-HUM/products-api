@@ -45,6 +45,6 @@ export class MarketplaceImportController {
     description: 'Sincronización encolada'
   })
   async runCron(@Param('marketplace') marketplace: ProductSyncMarketplace): Promise<void> {
-    await this.importMarketplaceService.enqueueImport(marketplace);
+    await this.importMarketplaceService.enqueueImport(marketplace, 'cron');
   }
 }
