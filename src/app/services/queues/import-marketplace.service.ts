@@ -14,7 +14,7 @@ export class ImportMarketplaceService {
     private readonly runsRepo: IGetProductSyncRunsRepository
   ) {}
 
-  async enqueueImport(marketplace: ProductSyncMarketplace) {
+  async enqueueImport(marketplace: ProductSyncMarketplace, triggeredBy: 'manual' | 'cron' = 'manual') {
     const runs = await this.runsRepo.getRuns({
       marketplace,
       offset: 0,
@@ -34,7 +34,7 @@ export class ImportMarketplaceService {
         meta: {
           requestedAt: new Date().toISOString(),
           requestedAtLocal: new Date().toLocaleString('es-AR'),
-          triggeredBy: 'manual'
+          triggeredBy
         }
       },
       {
