@@ -1,3 +1,3 @@
 export interface IOpenAIAttributesExtractor {
-  extract(params: { description: string; attributes: { name: string }[] }): Promise<Record<string, string>>;
+  extract(params: { title?: string; description: string; attributes: { name: string }[] }): Promise<Record<string, string>>;
 }

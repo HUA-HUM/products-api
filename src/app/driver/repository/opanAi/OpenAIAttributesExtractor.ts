@@ -14,8 +14,8 @@ export class OpenAIAttributesExtractor implements IOpenAIAttributesExtractor {
     });
   }
 
-  async extract(params: { description: string; attributes: { name: string }[] }): Promise<Record<string, string>> {
-    const { description, attributes } = params;
+  async extract(params: { title?: string; description: string; attributes: { name: string }[] }): Promise<Record<string, string>> {
+    const { title, description, attributes } = params;
 
     const attributesList = attributes.map(a => a.name).join(', ');
 
@@ -24,6 +24,9 @@ Extrae los siguientes atributos del texto del producto.
 
 ATRIBUTOS:
 ${attributesList}
+
+TITULO:
+${title ?? '-'}
 
 TEXTO:
 ${description}
@@ -37,6 +40,7 @@ Devuelve SOLO JSON válido:
 
 - Si no encontrás un atributo, devolver "-"
 - No inventes datos
+- Si el dato aparece en el título, también podés usarlo
 `;
 
     const response = await this.client.chat.completions.create({
