@@ -131,7 +131,7 @@ export class PublishFravegaProduct {
 
       if (!attributes) {
         return this.buildValidationResult(
-          'skipped',
+          'failed',
           'MISSING_REQUIRED_ATTRIBUTES',
           sku,
           'attributes_resolution',
