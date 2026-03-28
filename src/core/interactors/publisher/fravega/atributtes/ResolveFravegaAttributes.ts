@@ -36,6 +36,7 @@ export class ResolveFravegaAttributes {
        3. OPENAI (solo para requeridos)
     ====================================== */
     const aiValues = await this.openAI.extract({
+      title: product.title,
       description: product.description,
       attributes: requiredAttributes.map(attr => ({
         name: attr.name
@@ -124,8 +125,19 @@ export class ResolveFravegaAttributes {
 
     const map: Record<string, string> = {
       Color: raw.color,
-      Marca: raw.marca
+      Colores: raw.color,
+      Marca: raw.marca,
+      Estilo: raw.estilo,
+      Tipo: raw.tipo
     };
+
+    if (attrName === 'Color' || attrName === 'Colores') {
+      return map[attrName] || this.inferColor(fullText);
+    }
+
+    if (attrName === 'Capacidad (lts)') {
+      return this.extractCapacityLiters(fullText);
+    }
 
     if (attrName === 'Forma') {
       if (fullText.includes('plegable') || fullText.includes('foldable')) {
@@ -244,7 +256,9 @@ export class ResolveFravegaAttributes {
         pink: ['Rosa']
       };
 
-      return colorMap[normalizedValue] ?? [value];
+      const matchedColor = Object.entries(colorMap).find(([key]) => normalizedValue.includes(key));
+
+      return matchedColor?.[1] ?? colorMap[normalizedValue] ?? [value];
     }
 
     if (normalizedAttr.includes('material')) {
@@ -351,6 +365,49 @@ export class ResolveFravegaAttributes {
     }
 
     return null;
+  }
+
+  private inferColor(fullText: string): string | null {
+    const normalized = this.normalizeText(fullText);
+
+    const colorMap: Record<string, string> = {
+      negro: 'Negro',
+      black: 'Negro',
+      blanco: 'Blanco',
+      white: 'Blanco',
+      gris: 'Gris',
+      gray: 'Gris',
+      'gris oscuro': 'Gris oscuro',
+      'gris claro': 'Gris claro',
+      rojo: 'Rojo',
+      red: 'Rojo',
+      azul: 'Azul',
+      blue: 'Azul',
+      verde: 'Verde',
+      green: 'Verde',
+      marron: 'Marrón',
+      brown: 'Marrón',
+      rosa: 'Rosa',
+      pink: 'Rosa',
+      beige: 'Beige',
+      plata: 'Plata',
+      silver: 'Plata'
+    };
+
+    const matchedColor = Object.entries(colorMap).find(([key]) => normalized.includes(key));
+
+    return matchedColor?.[1] ?? null;
+  }
+
+  private extractCapacityLiters(fullText: string): string | number | null {
+    const normalized = this.normalizeText(fullText);
+    const match = normalized.match(/(\d+(?:[.,]\d+)?)\s*(l|lt|lts|litros?)/i);
+
+    if (!match?.[1]) {
+      return null;
+    }
+
+    return match[1].replace(',', '.');
   }
 
   private normalizeText(value: string): string {

@@ -245,6 +245,11 @@ export class PublishFravegaProduct {
   }
 
   private isAlreadyExistsError(message: string): boolean {
-    return message.toLowerCase().includes('ya existe un item con el codigo de referencia');
+    const normalized = message
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+
+    return normalized.includes('ya existe un item con el codigo de referencia');
   }
 }
