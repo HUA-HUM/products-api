@@ -18,7 +18,7 @@ export class ProcessPublicationJobs {
   ) {}
 
   async execute(): Promise<void> {
-    const claimResult = await this.claimRepository.claim(80);
+    const claimResult = await this.claimRepository.claim(100);
     const jobs = claimResult.items ?? [];
 
     console.log(

@@ -143,6 +143,10 @@ export class ResolveFravegaAttributes {
       return 'Otros';
     }
 
+    if (attrName === 'Tipo de sierra') {
+      return this.inferSawType(fullText);
+    }
+
     return map[attrName] || null;
   }
 
@@ -271,7 +275,82 @@ export class ResolveFravegaAttributes {
       }
     }
 
+    if (normalizedAttr.includes('tipo de sierra')) {
+      const sawType = this.inferSawType(normalizedValue);
+
+      if (sawType) {
+        return [sawType];
+      }
+    }
+
     return [value];
+  }
+
+  private inferSawType(fullText: string): string | null {
+    const normalized = this.normalizeText(fullText);
+
+    if (!normalized) {
+      return null;
+    }
+
+    if (
+      normalized.includes('caladora') ||
+      normalized.includes('jigsaw') ||
+      normalized.includes('vaiven')
+    ) {
+      return 'Caladora';
+    }
+
+    if (
+      normalized.includes('circular') ||
+      normalized.includes('circular saw') ||
+      normalized.includes('disco')
+    ) {
+      return 'Circular';
+    }
+
+    if (
+      normalized.includes('sable') ||
+      normalized.includes('reciprocante') ||
+      normalized.includes('reciproca') ||
+      normalized.includes('reciprocating')
+    ) {
+      return 'Sable';
+    }
+
+    if (
+      normalized.includes('ingletadora') ||
+      normalized.includes('miter saw') ||
+      normalized.includes('sensitiva')
+    ) {
+      return 'Ingletadora';
+    }
+
+    if (
+      normalized.includes('de banco') ||
+      normalized.includes('de mesa') ||
+      normalized.includes('table saw')
+    ) {
+      return 'De banco';
+    }
+
+    if (
+      normalized.includes('sin fin') ||
+      normalized.includes('de cinta') ||
+      normalized.includes('band saw')
+    ) {
+      return 'Sin fin';
+    }
+
+    if (normalized.includes('marqueteria') || normalized.includes('scroll saw')) {
+      return 'Marquetería';
+    }
+
+    if (normalized.includes('cadena') || normalized.includes('chainsaw')) {
+      return 'De cadena';
+    }
+
+    return null;
   }
 
   private normalizeText(value: string): string {
