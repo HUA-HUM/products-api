@@ -107,7 +107,8 @@ export class PublishFravegaProduct {
       /* ======================================
        3. CATEGORY
     ====================================== */
-      const categoryId = await this.resolveCategory.execute(product);
+      const categoryCandidates = await this.resolveCategory.executeCandidates(product, 5);
+      const categoryId = categoryCandidates[0] ?? null;
 
       if (!categoryId) {
         return this.buildValidationResult('skipped', 'CATEGORY_NOT_FOUND', sku, 'category_resolution');
@@ -127,7 +128,31 @@ export class PublishFravegaProduct {
       /* ======================================
        5. ATTRIBUTES
     ====================================== */
-      const attributes = await this.resolveAttributes.execute(categoryId, product);
+      let resolvedCategoryId = categoryId;
+      let attributes = await this.resolveAttributes.execute(resolvedCategoryId, product);
+
+      if (!attributes && categoryCandidates.length > 1) {
+        for (const fallbackCategoryId of categoryCandidates.slice(1)) {
+          console.log('[FRAVEGA CATEGORY] Retrying fallback category', {
+            sku,
+            originalCategoryId: resolvedCategoryId,
+            fallbackCategoryId
+          });
+
+          const fallbackAttributes = await this.resolveAttributes.execute(fallbackCategoryId, product);
+
+          if (fallbackAttributes) {
+            resolvedCategoryId = fallbackCategoryId;
+            attributes = fallbackAttributes;
+
+            console.log('[FRAVEGA CATEGORY] Fallback category resolved attributes', {
+              sku,
+              categoryId: resolvedCategoryId
+            });
+            break;
+          }
+        }
+      }
 
       if (!attributes) {
         return this.buildValidationResult(
@@ -136,7 +161,8 @@ export class PublishFravegaProduct {
           sku,
           'attributes_resolution',
           {
-            categoryId
+            categoryId: resolvedCategoryId,
+            attemptedCategoryIds: categoryCandidates
           }
         );
       }
@@ -157,7 +183,7 @@ export class PublishFravegaProduct {
     ====================================== */
       const payload = this.buildPayload.execute({
         product,
-        categoryId,
+        categoryId: resolvedCategoryId,
         brandId,
         attributes,
         prices

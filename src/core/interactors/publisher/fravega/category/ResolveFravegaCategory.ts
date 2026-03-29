@@ -16,22 +16,36 @@ export class ResolveFravegaCategory {
   ) {}
 
   async execute(product: { title?: string; description?: string; categoryPath?: string }): Promise<string | null> {
+    const categoryIds = await this.executeCandidates(product, 1);
+    return categoryIds[0] ?? null;
+  }
+
+  async executeCandidates(
+    product: { title?: string; description?: string; categoryPath?: string },
+    limit = 5
+  ): Promise<string[]> {
     if (!product.title) {
-      return null;
+      return [];
     }
 
     try {
       const categories = await this.categoriesRepository.getLeafCategories();
-      const candidates = this.selectCandidates(categories, product.categoryPath);
-
-      return this.matchRepository.match({
+      const shortlisted = this.selectCandidates(categories, product.categoryPath);
+      const selectedId = await this.matchRepository.match({
         title: product.title,
         description: product.description,
         categoryPath: product.categoryPath,
-        candidates
+        candidates: shortlisted
       });
+
+      const orderedIds = [
+        ...(selectedId ? [selectedId] : []),
+        ...shortlisted.map(category => category.id).filter(id => id !== selectedId)
+      ];
+
+      return orderedIds.slice(0, limit);
     } catch {
-      return null;
+      return [];
     }
   }
 
