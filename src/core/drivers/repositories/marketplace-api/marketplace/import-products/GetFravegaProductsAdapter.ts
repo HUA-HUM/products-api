@@ -12,8 +12,6 @@ export class GetFravegaProductsAdapter implements IGetMarketplaceProductsReposit
   async execute(limit: number, offset: number) {
     const response = await this.fravegaRepo.execute(limit, offset);
     const items = response.items ?? [];
-    const total = Number(response.total ?? 0);
-    const computedHasNext = offset + items.length < total;
 
     return {
       items: items.map(item => ({
@@ -25,17 +23,15 @@ export class GetFravegaProductsAdapter implements IGetMarketplaceProductsReposit
         status: item.status?.code ?? item.itemState ?? 'unknown',
         raw: item
       })),
-      hasNext: computedHasNext,
-      nextOffset: computedHasNext ? offset + items.length : undefined,
+      hasNext: response.hasNext === true,
+      nextOffset: response.nextOffset ?? undefined,
       debug: {
         sourceTotal: response.total ?? null,
         sourceLimit: response.limit ?? null,
         sourceOffset: response.offset ?? null,
         sourceCount: response.count ?? null,
         sourceHasNext: response.hasNext ?? null,
-        sourceNextOffset: response.nextOffset ?? null,
-        computedHasNext,
-        computedNextOffset: computedHasNext ? offset + items.length : null
+        sourceNextOffset: response.nextOffset ?? null
       }
     };
   }
