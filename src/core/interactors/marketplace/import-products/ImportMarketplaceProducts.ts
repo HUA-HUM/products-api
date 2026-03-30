@@ -58,6 +58,10 @@ export class ImportMarketplaceProducts {
       while (hasNext) {
         const response = await strategy.getProducts(this.FETCH_BATCH_LIMIT, offset);
 
+        this.logger.log(
+          `[IMPORT][${marketplace}] fetched page | offset=${offset} | items=${response?.items?.length ?? 0} | hasNext=${response?.hasNext ?? false} | nextOffset=${response?.nextOffset ?? 'null'} | debug=${JSON.stringify(response?.debug ?? {})}`
+        );
+
         if (!response || !Array.isArray(response.items)) {
           throw new Error(`[${marketplace}] Invalid response`);
         }

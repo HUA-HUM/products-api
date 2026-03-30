@@ -26,7 +26,17 @@ export class GetFravegaProductsAdapter implements IGetMarketplaceProductsReposit
         raw: item
       })),
       hasNext: computedHasNext,
-      nextOffset: computedHasNext ? offset + items.length : undefined
+      nextOffset: computedHasNext ? offset + items.length : undefined,
+      debug: {
+        sourceTotal: response.total ?? null,
+        sourceLimit: response.limit ?? null,
+        sourceOffset: response.offset ?? null,
+        sourceCount: response.count ?? null,
+        sourceHasNext: response.hasNext ?? null,
+        sourceNextOffset: response.nextOffset ?? null,
+        computedHasNext,
+        computedNextOffset: computedHasNext ? offset + items.length : null
+      }
     };
   }
 }
