@@ -14,5 +14,6 @@ export interface IGetMarketplaceProductsRepository {
     }[];
     hasNext: boolean;
     nextOffset?: number;
+    debug?: Record<string, unknown>;
   }>;
 }

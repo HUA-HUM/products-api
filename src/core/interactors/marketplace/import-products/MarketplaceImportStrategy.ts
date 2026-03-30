@@ -18,6 +18,7 @@ export interface MarketplaceImportStrategy {
     }[];
     hasNext: boolean;
     nextOffset?: number;
+    debug?: Record<string, unknown>;
   }>;
 
   mapStatus(status: string): string;
