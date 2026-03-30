@@ -44,6 +44,7 @@ export class ImportMarketplaceProducts {
   ): Promise<void> {
     const strategy = this.strategyResolver.resolve(marketplace);
     const { runId } = await this.syncRuns.start(marketplace);
+    const seenExternalIds = new Set<string>();
 
     let offset = 0;
     let hasNext = true;
@@ -68,7 +69,16 @@ export class ImportMarketplaceProducts {
 
         if (response.items.length === 0) break;
 
+        const externalIds = response.items.map(item => String(item.publicationId));
+        const repeatedIds = externalIds.filter(id => seenExternalIds.has(id));
+
+        externalIds.forEach(id => seenExternalIds.add(id));
+
         totalItems += response.items.length;
+
+        this.logger.log(
+          `[IMPORT][${marketplace}] page ids | first=${externalIds[0] ?? '-'} | last=${externalIds[externalIds.length - 1] ?? '-'} | uniqueSeen=${seenExternalIds.size} | repeatedInRun=${repeatedIds.length}`
+        );
 
         const mappedItems = response.items.map(item => ({
           externalId: String(item.publicationId),
