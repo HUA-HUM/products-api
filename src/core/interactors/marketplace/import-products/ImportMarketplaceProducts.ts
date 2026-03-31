@@ -23,8 +23,8 @@ type SendBulkResult =
 export class ImportMarketplaceProducts {
   private readonly logger = new Logger(ImportMarketplaceProducts.name);
 
-  private readonly FETCH_BATCH_LIMIT = 50;
-  private readonly MADRE_BULK_MAX_ITEMS = 10;
+  private readonly FETCH_BATCH_LIMIT = 25;
+  private readonly MADRE_BULK_MAX_ITEMS = 5;
   private readonly MAX_RETRIES = 3;
   private readonly RETRY_DELAY_MS = 1000;
 
