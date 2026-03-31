@@ -14,7 +14,7 @@ export function mapFravegaStatus(status?: string): ProductSyncStatus {
     case 'under_review':
     case 'en_revision':
     case 'review':
-      return 'EN_REVISION';
+      return 'PENDING';
     case 'incomplete':
     case 'editing':
     case 'draft':

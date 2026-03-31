@@ -19,7 +19,7 @@ export function mapOnCityStatus(status?: string): ProductSyncStatus {
     case 'en_revision':
     case 'under_review':
     case 'pending_approval':
-      return 'EN_REVISION';
+      return 'PENDING';
 
     case 'pending':
     case 'pendiente':
