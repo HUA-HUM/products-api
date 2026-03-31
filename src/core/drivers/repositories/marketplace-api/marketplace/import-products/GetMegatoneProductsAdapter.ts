@@ -10,6 +10,18 @@ export class GetMegatoneProductsAdapter implements IGetMarketplaceProductsReposi
   ) {}
 
   async execute(limit: number, offset: number) {
-    return this.megatoneRepo.execute(limit, offset);
+    const response = await this.megatoneRepo.execute(limit, offset);
+
+    return {
+      ...response,
+      debug: {
+        sourceTotal: response.total ?? null,
+        sourceLimit: response.limit ?? null,
+        sourceOffset: response.offset ?? null,
+        sourceCount: response.count ?? null,
+        sourceHasNext: response.hasNext ?? null,
+        sourceNextOffset: response.nextOffset ?? null
+      }
+    };
   }
 }
