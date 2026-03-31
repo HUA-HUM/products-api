@@ -4,6 +4,7 @@ import { ISendBulkProductSyncRepository } from 'src/core/adapters/repositories/m
 import { IProductSyncRepository } from 'src/core/adapters/repositories/madre/product-sync/IProductSyncRepository';
 import { ProductSyncMarketplace } from 'src/core/entitis/madre-api/product-sync/ProductSyncMarketplace';
 import { MarketplaceImportStrategyResolver } from './factory/MarketplaceImportStrategyResolver';
+import { MarketplaceHttpError } from 'src/core/drivers/repositories/marketplace-api/http/errors/MarketplaceHttpError';
 
 export type ImportProgress = {
   batchesProcessed: number;
@@ -25,6 +26,7 @@ export class ImportMarketplaceProducts {
 
   private readonly FETCH_BATCH_LIMIT = 25;
   private readonly MADRE_BULK_MAX_ITEMS = 5;
+  private readonly MAX_FETCH_RETRIES = 3;
   private readonly MAX_RETRIES = 3;
   private readonly RETRY_DELAY_MS = 1000;
 
@@ -57,7 +59,7 @@ export class ImportMarketplaceProducts {
 
     try {
       while (hasNext) {
-        const response = await strategy.getProducts(this.FETCH_BATCH_LIMIT, offset);
+        const response = await this.fetchProductsWithRetry(strategy, marketplace, offset);
 
         this.logger.log(
           `[IMPORT][${marketplace}] fetched page | offset=${offset} | items=${response?.items?.length ?? 0} | hasNext=${response?.hasNext ?? false} | nextOffset=${response?.nextOffset ?? 'null'} | debug=${JSON.stringify(response?.debug ?? {})}`
@@ -140,9 +142,41 @@ export class ImportMarketplaceProducts {
       );
     } catch (err: any) {
       await this.syncRuns.fail(runId, err?.message ?? 'Unknown error');
-      this.logger.error(`[IMPORT][${marketplace}] failed | runId=${runId}`, err?.stack);
+      this.logger.error(
+        `[IMPORT][${marketplace}] failed | runId=${runId} | statusCode=${err?.statusCode ?? 'unknown'} | response=${JSON.stringify(err?.response ?? err?.data ?? null)}`,
+        err?.stack
+      );
       throw err;
     }
+  }
+
+  private async fetchProductsWithRetry(
+    strategy: ReturnType<MarketplaceImportStrategyResolver['resolve']>,
+    marketplace: ProductSyncMarketplace,
+    offset: number
+  ) {
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= this.MAX_FETCH_RETRIES; attempt++) {
+      try {
+        return await strategy.getProducts(this.FETCH_BATCH_LIMIT, offset);
+      } catch (error) {
+        lastError = error;
+        const marketplaceError = error as MarketplaceHttpError;
+
+        this.logger.warn(
+          `[IMPORT][${marketplace}] fetch retry ${attempt}/${this.MAX_FETCH_RETRIES} failed | offset=${offset} | statusCode=${marketplaceError?.statusCode ?? 'unknown'} | response=${JSON.stringify(marketplaceError?.response ?? null)}`
+        );
+
+        if (attempt === this.MAX_FETCH_RETRIES) {
+          throw error;
+        }
+
+        await new Promise(res => setTimeout(res, this.RETRY_DELAY_MS));
+      }
+    }
+
+    throw lastError;
   }
 
   private async sendWithRetry(payload: BulkMarketplaceProductsDto): Promise<SendBulkResult> {
