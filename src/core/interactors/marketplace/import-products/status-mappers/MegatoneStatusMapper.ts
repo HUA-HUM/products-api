@@ -15,7 +15,7 @@ export function mapMegatoneStatus(status?: string): ProductSyncStatus {
     case 'en_revision_aprobacion':
     case 'under_review':
     case 'under_review_approval':
-      return 'EN_REVISION';
+      return 'PENDING';
 
     case 'pausado':
     case 'paused':
