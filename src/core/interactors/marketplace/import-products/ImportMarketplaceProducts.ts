@@ -53,7 +53,7 @@ export class ImportMarketplaceProducts {
     const { runId } = await this.syncRuns.start(marketplace);
     const seenExternalIds = new Set<string>();
 
-    let offset = 0;
+    let offset = strategy.initialOffset ?? 0;
     let hasNext = true;
     let knownTotal: number | null = null;
 

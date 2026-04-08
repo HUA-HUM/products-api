@@ -6,6 +6,7 @@ import { GetFravegaProductsAdapter } from 'src/core/drivers/repositories/marketp
 @Injectable()
 export class FravegaImportStrategy {
   marketplace: ProductSyncMarketplace = 'fravega';
+  initialOffset = 1;
 
   constructor(private readonly productsRepo: GetFravegaProductsAdapter) {}
 
