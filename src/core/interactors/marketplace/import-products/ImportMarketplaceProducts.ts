@@ -20,12 +20,17 @@ type SendBulkResult =
       errorDetails?: unknown;
     };
 
+type FetchProductsResult = Awaited<
+  ReturnType<ReturnType<MarketplaceImportStrategyResolver['resolve']>['getProducts']>
+>;
+
 @Injectable()
 export class ImportMarketplaceProducts {
   private readonly logger = new Logger(ImportMarketplaceProducts.name);
 
   private readonly FETCH_BATCH_LIMIT = 25;
   private readonly MADRE_BULK_MAX_ITEMS = 5;
+  private readonly MIN_FETCH_BATCH_LIMIT = 1;
   private readonly MAX_FETCH_RETRIES = 3;
   private readonly MAX_RETRIES = 3;
   private readonly RETRY_DELAY_MS = 1000;
@@ -50,6 +55,7 @@ export class ImportMarketplaceProducts {
 
     let offset = 0;
     let hasNext = true;
+    let knownTotal: number | null = null;
 
     let totalBatches = 0;
     let totalItems = 0;
@@ -59,7 +65,26 @@ export class ImportMarketplaceProducts {
 
     try {
       while (hasNext) {
-        const response = await this.fetchProductsWithRetry(strategy, marketplace, offset);
+        let response: FetchProductsResult;
+
+        try {
+          const requestedLimit =
+            knownTotal === null ? this.FETCH_BATCH_LIMIT : Math.min(this.FETCH_BATCH_LIMIT, Math.max(knownTotal - offset, 1));
+
+          response = await this.fetchProductsWithRetry(strategy, marketplace, offset, requestedLimit);
+        } catch (err: any) {
+          if (totalItems > 0) {
+            await this.syncRuns.finish(runId, 'PARTIAL');
+
+            this.logger.error(
+              `[IMPORT][${marketplace}] stopped early after partial import | runId=${runId} | offset=${offset} | imported=${totalItems} | failed=${failedItems} | statusCode=${err?.statusCode ?? 'unknown'} | response=${JSON.stringify(err?.response ?? err?.data ?? null)}`
+            );
+
+            return;
+          }
+
+          throw err;
+        }
 
         this.logger.log(
           `[IMPORT][${marketplace}] fetched page | offset=${offset} | items=${response?.items?.length ?? 0} | hasNext=${response?.hasNext ?? false} | nextOffset=${response?.nextOffset ?? 'null'} | debug=${JSON.stringify(response?.debug ?? {})}`
@@ -71,12 +96,15 @@ export class ImportMarketplaceProducts {
 
         if (response.items.length === 0) break;
 
+        const sourceTotal = Number(response?.debug?.sourceTotal ?? NaN);
+        if (Number.isFinite(sourceTotal) && sourceTotal > 0) {
+          knownTotal = sourceTotal;
+        }
+
         const externalIds = response.items.map(item => String(item.publicationId));
         const repeatedIds = externalIds.filter(id => seenExternalIds.has(id));
 
         externalIds.forEach(id => seenExternalIds.add(id));
-
-        totalItems += response.items.length;
 
         this.logger.log(
           `[IMPORT][${marketplace}] page ids | first=${externalIds[0] ?? '-'} | last=${externalIds[externalIds.length - 1] ?? '-'} | uniqueSeen=${seenExternalIds.size} | repeatedInRun=${repeatedIds.length}`
@@ -111,6 +139,8 @@ export class ImportMarketplaceProducts {
               `[IMPORT][${marketplace}] bulk send failed | batch=${totalBatches} | items=${payload.items.length} | reason=${sendResult.errorMessage}`,
               sendResult.errorDetails ? JSON.stringify(sendResult.errorDetails) : undefined
             );
+          } else {
+            totalItems += payload.items.length;
           }
 
           await this.syncRuns.progress(runId, {
@@ -131,6 +161,9 @@ export class ImportMarketplaceProducts {
 
         hasNext = response.hasNext === true;
         if (hasNext) {
+          if (typeof response.nextOffset !== 'number') {
+            throw new Error(`[${marketplace}] Missing nextOffset while hasNext=true`);
+          }
           offset = response.nextOffset!;
         }
       }
@@ -153,30 +186,54 @@ export class ImportMarketplaceProducts {
   private async fetchProductsWithRetry(
     strategy: ReturnType<MarketplaceImportStrategyResolver['resolve']>,
     marketplace: ProductSyncMarketplace,
-    offset: number
-  ) {
+    offset: number,
+    limit: number
+  ): Promise<FetchProductsResult> {
     let lastError: unknown;
+    const safeLimit = Math.max(limit, this.MIN_FETCH_BATCH_LIMIT);
 
     for (let attempt = 1; attempt <= this.MAX_FETCH_RETRIES; attempt++) {
       try {
-        return await strategy.getProducts(this.FETCH_BATCH_LIMIT, offset);
+        return await strategy.getProducts(safeLimit, offset);
       } catch (error) {
         lastError = error;
         const marketplaceError = error as MarketplaceHttpError;
 
         this.logger.warn(
-          `[IMPORT][${marketplace}] fetch retry ${attempt}/${this.MAX_FETCH_RETRIES} failed | offset=${offset} | statusCode=${marketplaceError?.statusCode ?? 'unknown'} | response=${JSON.stringify(marketplaceError?.response ?? null)}`
+          `[IMPORT][${marketplace}] fetch retry ${attempt}/${this.MAX_FETCH_RETRIES} failed | offset=${offset} | limit=${safeLimit} | statusCode=${marketplaceError?.statusCode ?? 'unknown'} | response=${JSON.stringify(marketplaceError?.response ?? marketplaceError?.message ?? null)}`
         );
 
         if (attempt === this.MAX_FETCH_RETRIES) {
-          throw error;
+          break;
         }
 
         await new Promise(res => setTimeout(res, this.RETRY_DELAY_MS));
       }
     }
 
+    if (safeLimit > this.MIN_FETCH_BATCH_LIMIT) {
+      const fallbackLimit = this.getFallbackFetchLimit(safeLimit);
+
+      this.logger.warn(
+        `[IMPORT][${marketplace}] retrying fetch with smaller page size | offset=${offset} | previousLimit=${safeLimit} | nextLimit=${fallbackLimit}`
+      );
+
+      return this.fetchProductsWithRetry(strategy, marketplace, offset, fallbackLimit);
+    }
+
     throw lastError;
+  }
+
+  private getFallbackFetchLimit(limit: number): number {
+    if (limit > 10) {
+      return 10;
+    }
+
+    if (limit > 5) {
+      return 5;
+    }
+
+    return this.MIN_FETCH_BATCH_LIMIT;
   }
 
   private async sendWithRetry(payload: BulkMarketplaceProductsDto): Promise<SendBulkResult> {
