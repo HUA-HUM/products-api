@@ -2,6 +2,7 @@ import { ProductSyncMarketplace } from 'src/core/entitis/madre-api/product-sync/
 
 export interface MarketplaceImportStrategy {
   marketplace: ProductSyncMarketplace;
+  initialOffset?: number;
 
   getProducts(
     limit: number,
