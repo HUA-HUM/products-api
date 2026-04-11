@@ -1,10 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { MadreHttpClient } from '../http/MadreHttpClient';
 import { IMadreProductDeltaRepository } from 'src/core/adapters/repositories/madre/product-delta/IMadreProductDeltaRepository';
-import {
-  MadreDeltaCursor,
-  MadreDeltaChangesResponse
-} from 'src/core/entitis/madre-api/product-delta/MadreDeltaChange';
+import { MadreDeltaCursor, MadreDeltaChangesResponse } from 'src/core/entitis/madre-api/product-delta/MadreDeltaChange';
 
 @Injectable()
 export class MadreProductDeltaRepository implements IMadreProductDeltaRepository {
