@@ -22,6 +22,29 @@ export interface PaginatedSyncItemsResponse {
   nextOffset: number | null;
 }
 
+export type MarketplaceName = 'megatone' | 'oncity' | 'fravega';
+
+export interface MarketplaceSnapshotItem {
+  marketplace: MarketplaceName;
+  marketplaceSku: string;
+  externalId: string;
+  price: number;
+  stock: number;
+  status: string;
+  isActive: boolean;
+  lastSeenAt: string;
+  updatedAt: string;
+}
+
+export interface MarketplaceSnapshotResponse {
+  sellerSku: string;
+  marketplaces: MarketplaceName[];
+  priceByMarketplace: Record<string, number>;
+  stockByMarketplace: Record<string, number>;
+  statusByMarketplace: Record<string, string>;
+  items: MarketplaceSnapshotItem[];
+}
+
 @Injectable()
 export class GetProductSyncItemsRepository implements IGetProductSyncItemsRepository {
   constructor(private readonly httpClient: MadreHttpClient) {}
@@ -40,5 +63,20 @@ export class GetProductSyncItemsRepository implements IGetProductSyncItemsReposi
     }
 
     return this.httpClient.get<any>(`/internal/marketplace/products/${sellerSku}`);
+  }
+
+  async getBySellerSkuAndMarketplace(
+    sellerSku: string,
+    marketplace: MarketplaceName
+  ): Promise<MarketplaceSnapshotItem | null> {
+    if (!sellerSku) {
+      throw new Error('sellerSku is required');
+    }
+
+    const response = await this.httpClient.get<MarketplaceSnapshotResponse>(
+      `/internal/marketplace/products/items/${encodeURIComponent(sellerSku)}/marketplaces`
+    );
+
+    return response.items.find(i => i.marketplace === marketplace) ?? null;
   }
 }
