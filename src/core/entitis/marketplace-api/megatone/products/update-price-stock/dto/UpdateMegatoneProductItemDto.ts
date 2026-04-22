@@ -1,8 +1,8 @@
 export interface UpdateMegatoneProductItemDto {
   publicationId: number;
-  precioLista: number;
+  precioLista?: number;
   precioPromocional?: number;
-  stock: number;
-  alicuotaIva: number;
-  alicuotaImpuestoInterno: number;
+  stock?: number;
+  alicuotaIva?: number;
+  alicuotaImpuestoInterno?: number;
 }
