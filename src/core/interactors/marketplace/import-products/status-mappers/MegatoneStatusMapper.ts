@@ -1,7 +1,7 @@
 import { ProductSyncStatus } from 'src/core/entitis/madre-api/product-sync/ProductSyncStatus';
 
 export function mapMegatoneStatus(status?: string): ProductSyncStatus {
-  if (!status) return 'ERROR';
+  if (!status) return 'DELETED';
 
   const normalized = normalizeStatus(status);
 
@@ -15,7 +15,7 @@ export function mapMegatoneStatus(status?: string): ProductSyncStatus {
     case 'en_revision_aprobacion':
     case 'under_review':
     case 'under_review_approval':
-      return 'PENDING';
+      return 'EN_REVISION';
 
     case 'pausado':
     case 'paused':
@@ -30,6 +30,8 @@ export function mapMegatoneStatus(status?: string): ProductSyncStatus {
     case 'pending_activation_approval':
     case 'pendiente_aprobacion':
     case 'pendiente_de_aprobacion':
+      return 'EN_REVISION';
+
     case 'pending':
       return 'PENDING';
 
@@ -39,7 +41,7 @@ export function mapMegatoneStatus(status?: string): ProductSyncStatus {
       return 'DELETED';
 
     default:
-      return 'ERROR';
+      return 'DELETED';
   }
 }
 

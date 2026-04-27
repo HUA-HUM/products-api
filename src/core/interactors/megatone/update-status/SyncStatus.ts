@@ -3,7 +3,7 @@ import { IGetProductSyncItemsRepository } from 'src/core/adapters/repositories/m
 import { IUpdateProductSyncItemRepository } from 'src/core/adapters/repositories/madre/product-sync/IUpdateProductSyncItemRepository';
 import { IUpdateMegatoneProductStatusRepository } from 'src/core/adapters/repositories/marketplace/megatone/products/update-status/IUpdateMegatoneProductStatusRepository';
 
-type SyncItemStatus = 'ACTIVE' | 'PAUSED' | 'PENDING' | 'DELETED' | 'ERROR';
+type SyncItemStatus = 'ACTIVE' | 'PAUSED' | 'PENDING' | 'EN_REVISION' | 'DELETED' | 'ERROR';
 
 type SyncItemDto = {
   seller_sku: string;
@@ -78,7 +78,7 @@ export class SyncStatus {
     const { seller_sku, external_id, status } = item;
 
     /* ---------- SKIPS DEFINIDOS ---------- */
-    if (status === 'DELETED' || status === 'PENDING' || status === 'ERROR') {
+    if (status === 'DELETED' || status === 'PENDING' || status === 'EN_REVISION' || status === 'ERROR') {
       console.log(`[STATUS] ⏭ Skip ${status} | SKU=${seller_sku}`);
       return false;
     }
