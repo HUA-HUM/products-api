@@ -6,6 +6,8 @@ import { GetMegatoneProductsAdapter } from 'src/core/drivers/repositories/market
 @Injectable()
 export class MegatoneImportStrategy {
   marketplace: ProductSyncMarketplace = 'megatone';
+  initialOffset = 1;
+  fetchBatchLimit = 10;
 
   constructor(private readonly productsRepo: GetMegatoneProductsAdapter) {}
 

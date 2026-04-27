@@ -52,6 +52,7 @@ export class ImportMarketplaceProducts {
     const strategy = this.strategyResolver.resolve(marketplace);
     const { runId } = await this.syncRuns.start(marketplace);
     const seenExternalIds = new Set<string>();
+    const fetchBatchLimit = strategy.fetchBatchLimit ?? this.FETCH_BATCH_LIMIT;
 
     let offset = strategy.initialOffset ?? 0;
     let hasNext = true;
@@ -69,7 +70,7 @@ export class ImportMarketplaceProducts {
 
         try {
           const requestedLimit =
-            knownTotal === null ? this.FETCH_BATCH_LIMIT : Math.min(this.FETCH_BATCH_LIMIT, Math.max(knownTotal - offset, 1));
+            knownTotal === null ? fetchBatchLimit : Math.min(fetchBatchLimit, Math.max(knownTotal - offset, 1));
 
           response = await this.fetchProductsWithRetry(strategy, marketplace, offset, requestedLimit);
         } catch (err: any) {
@@ -94,11 +95,19 @@ export class ImportMarketplaceProducts {
           throw new Error(`[${marketplace}] Invalid response`);
         }
 
-        if (response.items.length === 0) break;
-
         const sourceTotal = Number(response?.debug?.sourceTotal ?? NaN);
         if (Number.isFinite(sourceTotal) && sourceTotal > 0) {
           knownTotal = sourceTotal;
+        }
+
+        if (response.items.length === 0) {
+          if (knownTotal !== null && offset < knownTotal) {
+            throw new Error(
+              `[${marketplace}] Unexpected empty page before reaching total | offset=${offset} | total=${knownTotal}`
+            );
+          }
+
+          break;
         }
 
         const externalIds = response.items.map(item => String(item.publicationId));
