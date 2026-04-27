@@ -8,6 +8,7 @@ export class MegatoneImportStrategy {
   marketplace: ProductSyncMarketplace = 'megatone';
   initialOffset = 1;
   fetchBatchLimit = 10;
+  usesSequentialPageOffset = true;
 
   constructor(private readonly productsRepo: GetMegatoneProductsAdapter) {}
 

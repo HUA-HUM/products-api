@@ -53,6 +53,7 @@ export class ImportMarketplaceProducts {
     const { runId } = await this.syncRuns.start(marketplace);
     const seenExternalIds = new Set<string>();
     const fetchBatchLimit = strategy.fetchBatchLimit ?? this.FETCH_BATCH_LIMIT;
+    const usesSequentialPageOffset = strategy.usesSequentialPageOffset === true;
 
     let offset = strategy.initialOffset ?? 0;
     let hasNext = true;
@@ -70,7 +71,9 @@ export class ImportMarketplaceProducts {
 
         try {
           const requestedLimit =
-            knownTotal === null ? fetchBatchLimit : Math.min(fetchBatchLimit, Math.max(knownTotal - offset, 1));
+            usesSequentialPageOffset || knownTotal === null
+              ? fetchBatchLimit
+              : Math.min(fetchBatchLimit, Math.max(knownTotal - offset, 1));
 
           response = await this.fetchProductsWithRetry(strategy, marketplace, offset, requestedLimit);
         } catch (err: any) {
@@ -170,10 +173,15 @@ export class ImportMarketplaceProducts {
 
         hasNext = response.hasNext === true;
         if (hasNext) {
-          if (typeof response.nextOffset !== 'number') {
-            throw new Error(`[${marketplace}] Missing nextOffset while hasNext=true`);
+          if (usesSequentialPageOffset) {
+            offset += 1;
+          } else {
+            if (typeof response.nextOffset !== 'number') {
+              throw new Error(`[${marketplace}] Missing nextOffset while hasNext=true`);
+            }
+
+            offset = response.nextOffset!;
           }
-          offset = response.nextOffset!;
         }
       }
 

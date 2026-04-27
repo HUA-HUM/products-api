@@ -4,6 +4,7 @@ export interface MarketplaceImportStrategy {
   marketplace: ProductSyncMarketplace;
   initialOffset?: number;
   fetchBatchLimit?: number;
+  usesSequentialPageOffset?: boolean;
 
   getProducts(
     limit: number,
