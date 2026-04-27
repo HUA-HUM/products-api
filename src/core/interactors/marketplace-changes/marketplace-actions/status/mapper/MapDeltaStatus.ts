@@ -13,5 +13,5 @@ export function mapDeltaStatus(valorNuevo: string): DeltaActiveInactive {
   if (ACTIVE_VALUES.has(normalized)) return 'active';
   if (INACTIVE_VALUES.has(normalized)) return 'inactive';
 
-  throw new Error(`Invalid status (expected ACTIVE | PAUSED | PENDING): ${valorNuevo}`);
+  throw new Error(`Invalid status (expected ACTIVE | INACTIVE | PAUSED | PENDING): ${valorNuevo}`);
 }
