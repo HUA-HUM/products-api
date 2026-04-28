@@ -3,7 +3,7 @@ import { IGetProductSyncItemsRepository } from 'src/core/adapters/repositories/m
 import { IUpdateProductSyncItemRepository } from 'src/core/adapters/repositories/madre/product-sync/IUpdateProductSyncItemRepository';
 import { IGetMadreProductsRepository } from 'src/core/adapters/repositories/madre/products/get/IGetMadreProductsRepository';
 import { IUpdateMegatoneProductsRepository } from 'src/core/adapters/repositories/marketplace/megatone/products/update-price-stock/IUpdateMegatoneProductsRepository';
-import { applyMegatonePromotion } from './pricing/applyMegatonePromotion';
+import { ResolveMegatonePrice } from 'src/core/interactors/marketplace-changes/marketplace-actions/price/pricing/ResolveMegatonePrice';
 
 @Injectable()
 export class UpdatePriceAndStock {
@@ -20,7 +20,9 @@ export class UpdatePriceAndStock {
     private readonly updateMegatone: IUpdateMegatoneProductsRepository,
 
     @Inject('IUpdateProductSyncItemRepository')
-    private readonly updateSyncItem: IUpdateProductSyncItemRepository
+    private readonly updateSyncItem: IUpdateProductSyncItemRepository,
+
+    private readonly resolveMegatonePrice: ResolveMegatonePrice
   ) {}
 
   async execute(): Promise<{
@@ -128,7 +130,7 @@ export class UpdatePriceAndStock {
     let precioPromocional: number | undefined;
 
     if (priceChanged) {
-      const promo = applyMegatonePromotion(madrePrice);
+      const promo = this.resolveMegatonePrice.resolve(madrePrice);
       precioLista = promo.precioLista;
       precioPromocional = promo.precioPromocional;
 
