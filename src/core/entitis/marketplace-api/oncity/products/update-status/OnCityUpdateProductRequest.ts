@@ -1,7 +1,7 @@
 export interface OnCityUpdateProductRequest {
   id: string;
   externalId: string;
-  status: 'active' | 'paused';
+  status: 'active' | 'inactive';
 
   name: string;
   description: string;
