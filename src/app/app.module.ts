@@ -12,6 +12,10 @@ import { PublicationsModule } from './module/publisher/publication_run/createPro
 import { CancelPublicationRunModule } from './module/publisher/publication_run/CancelProcess/CancelPublicationRunModule';
 import { ProcessPublicationJobsModule } from './module/publisher/publication_job/worker/ProcessPublicationJobsModule';
 import { ExecutePublicationsModule } from './module/publisher/execute/ExecutePublicationsModule';
+import { GetPendingMarketplaceChangesModule } from './module/marketplace-changes/source/GetPendingMarketplaceChanges.Module';
+import { ProcessMarketplaceChangesModule } from './module/marketplace-changes/process/ProcessMarketplaceChanges.Module';
+import { ExecuteManualUpdateModule } from './module/marketplace-changes/manual/ExecuteManualUpdate.Module';
+import { RunMarketplaceChangesModule } from './module/marketplace-changes/run/RunMarketplaceChanges.Module';
 
 @Module({
   imports: [
@@ -30,7 +34,11 @@ import { ExecutePublicationsModule } from './module/publisher/execute/ExecutePub
     GetPublicationRunModule,
     CancelPublicationRunModule,
     ProcessPublicationJobsModule,
-    ExecutePublicationsModule
+    ExecutePublicationsModule,
+    GetPendingMarketplaceChangesModule,
+    ProcessMarketplaceChangesModule,
+    ExecuteManualUpdateModule,
+    RunMarketplaceChangesModule
   ]
 })
 export class AppModule {}

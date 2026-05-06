@@ -3,6 +3,10 @@ import * as http from 'node:http';
 import * as https from 'node:https';
 import { MadreHttpError } from './errors/MadreHttpError';
 
+type RequestOptions = {
+  headers?: Record<string, string>;
+};
+
 export class MadreHttpClient {
   private readonly client: AxiosInstance;
 
@@ -28,18 +32,23 @@ export class MadreHttpClient {
     });
   }
 
-  async get<T>(url: string, params?: any): Promise<T> {
+  async get<T>(url: string, params?: any, options?: RequestOptions): Promise<T> {
     try {
-      const response = await this.client.get<T>(url, { params });
+      const response = await this.client.get<T>(url, {
+        params,
+        headers: options?.headers
+      });
       return response.data;
     } catch (error) {
       throw this.handleError('GET', url, error);
     }
   }
 
-  async post<T>(url: string, body: any): Promise<T> {
+  async post<T>(url: string, body: any, options?: RequestOptions): Promise<T> {
     try {
-      const response = await this.client.post<T>(url, body);
+      const response = await this.client.post<T>(url, body, {
+        headers: options?.headers
+      });
       return response.data;
     } catch (error) {
       throw this.handleError('POST', url, error);
