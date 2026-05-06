@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { MadreHttpClient } from '../http/MadreHttpClient';
+import { MadreHttpError } from '../http/errors/MadreHttpError';
 import { IGetProductSyncItemsRepository } from 'src/core/adapters/repositories/madre/product-sync/IGetProductSyncItemsRepository';
 
 export interface ProductSyncItemDto {
@@ -73,10 +74,18 @@ export class GetProductSyncItemsRepository implements IGetProductSyncItemsReposi
       throw new Error('sellerSku is required');
     }
 
-    const response = await this.httpClient.get<MarketplaceSnapshotResponse>(
-      `/internal/marketplace/products/items/${encodeURIComponent(sellerSku)}/marketplaces`
-    );
+    try {
+      const response = await this.httpClient.get<MarketplaceSnapshotResponse>(
+        `/internal/marketplace/products/items/${encodeURIComponent(sellerSku)}/marketplaces`
+      );
 
-    return response.items.find(i => i.marketplace === marketplace) ?? null;
+      return response.items.find(i => i.marketplace === marketplace) ?? null;
+    } catch (error) {
+      if (error instanceof MadreHttpError && error.statusCode === 404) {
+        return null;
+      }
+
+      throw error;
+    }
   }
 }

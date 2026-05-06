@@ -3,6 +3,10 @@ import { MarketplaceActionResult } from 'src/core/entitis/marketplace-changes/Ma
 import { IGetProductSyncItemsRepository } from 'src/core/adapters/repositories/madre/product-sync/IGetProductSyncItemsRepository';
 import { IUpdateMegatoneProductsRepository } from 'src/core/adapters/repositories/marketplace/megatone/products/update-price-stock/IUpdateMegatoneProductsRepository';
 import { UpdateMegatoneProductsPayload } from 'src/core/entitis/marketplace-api/megatone/products/update-price-stock/UpdateMegatoneProductsPayload';
+import {
+  buildNotPublishedMarketplaceMessage,
+  isNotPublishedMarketplaceMessage
+} from '../shared/MarketplacePublicationState';
 
 @Injectable()
 export class UpdateMegatoneStock {
@@ -16,7 +20,6 @@ export class UpdateMegatoneStock {
 
   async execute(params: { sku: string; valorNuevo: string }): Promise<MarketplaceActionResult> {
     const startedAt = Date.now();
-    console.log(`[MKT-CHANGES] Update megatone stock | SKU=${params.sku} | value=${params.valorNuevo}`);
 
     try {
       if (params.valorNuevo === null || params.valorNuevo === undefined || String(params.valorNuevo).trim() === '') {
@@ -32,7 +35,7 @@ export class UpdateMegatoneStock {
       const snapshot = await this.syncItems.getBySellerSkuAndMarketplace(params.sku, 'megatone');
 
       if (!snapshot) {
-        throw new Error(`No sync_item found for sku=${params.sku} marketplace=megatone`);
+        throw new Error(buildNotPublishedMarketplaceMessage(params.sku, 'megatone'));
       }
 
       const publicationId = Number(snapshot.externalId);
@@ -62,7 +65,9 @@ export class UpdateMegatoneStock {
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.log(`[MKT-CHANGES] Megatone stock update FAILED | SKU=${params.sku} | error=${message}`);
+      if (!isNotPublishedMarketplaceMessage(message)) {
+        console.log(`[MKT-CHANGES] Megatone stock update FAILED | SKU=${params.sku} | error=${message}`);
+      }
 
       return {
         marketplace: 'megatone',

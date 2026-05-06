@@ -52,10 +52,20 @@ import { CheckProductExistsRepository } from 'src/core/drivers/repositories/madr
 import { CreateMegatoneProductsRepository } from 'src/core/drivers/repositories/marketplace-api/megatone/createProducts/CreateMegatoneProductsRepository';
 import { OpenAIAttributesExtractor } from 'src/app/driver/repository/opanAi/OpenAIAttributesExtractor';
 import { MatchCategoryRepository } from 'src/app/driver/repository/opanAi/MatchCategoryRepository';
+import { MatchOnCityBrandRepository } from 'src/app/driver/repository/opanAi/MatchOnCityBrandRepository';
+import { MatchOnCityCategoryRepository } from 'src/app/driver/repository/opanAi/MatchOnCityCategoryRepository';
 import { GetCategoryIdRepository } from 'src/core/drivers/repositories/marketplace-api/megatone/getCategoryId/MegatoneCategoryResponse';
 import { GetBrandIdRepository } from 'src/core/drivers/repositories/marketplace-api/megatone/getBrandId/GetBrandIdRepository';
 import { GetFravegaBrandIdRepository } from 'src/core/drivers/repositories/marketplace-api/fravega/GetBrandId/GetFravegaBrandIdRepository';
 import { GetFravegaCategoriesTreeRepository } from 'src/core/drivers/repositories/marketplace-api/fravega/GetCategoriesTree/GetFravegaCategoriesTreeRepository';
+import { PublishOncityProduct } from 'src/core/interactors/publisher/oncity/PublishOncityProduct';
+import { ResolveOnCityBrand } from 'src/core/interactors/publisher/oncity/brand/ResolveOnCityBrand';
+import { ResolveOnCityCategory } from 'src/core/interactors/publisher/oncity/category/ResolveOnCityCategory';
+import { BuildOnCityPayload } from 'src/core/interactors/publisher/oncity/payload/BuildOnCityPayload';
+import { ResolveOnCityPrices } from 'src/core/interactors/publisher/oncity/price/ResolveOnCityPrices';
+import { CreateOnCityProductsRepository } from 'src/core/drivers/repositories/marketplace-api/oncity/createProducts/CreateOnCityProductsRepository';
+import { GetOnCityBrandsRepository } from 'src/core/drivers/repositories/marketplace-api/oncity/GetBrand/GetOnCityBrandsRepository';
+import { GetOnCityCategoriesTreeRepository } from 'src/core/drivers/repositories/marketplace-api/oncity/GetCategoriesTree/GetOnCityCategoriesTreeRepository';
 
 /* ======================================
    OPENAI
@@ -122,6 +132,20 @@ import { GetFravegaCategoriesTreeRepository } from 'src/core/drivers/repositorie
       useFactory: (http: MarketplaceHttpClient) => new CreateFravegaProductsRepository(http),
       inject: [MarketplaceHttpClient]
     },
+    {
+      provide: 'ICreateOnCityProductsRepository',
+      useClass: CreateOnCityProductsRepository
+    },
+    {
+      provide: 'IGetOnCityBrandsRepository',
+      useFactory: (http: MarketplaceHttpClient) => new GetOnCityBrandsRepository(http),
+      inject: [MarketplaceHttpClient]
+    },
+    {
+      provide: 'IGetOnCityCategoriesTreeRepository',
+      useFactory: (http: MarketplaceHttpClient) => new GetOnCityCategoriesTreeRepository(http),
+      inject: [MarketplaceHttpClient]
+    },
 
     /* ======================================
        OPENAI
@@ -133,6 +157,14 @@ import { GetFravegaCategoriesTreeRepository } from 'src/core/drivers/repositorie
     {
       provide: 'IMatchFravegaCategoryRepository',
       useClass: MatchCategoryRepository
+    },
+    {
+      provide: 'IMatchOnCityCategoryRepository',
+      useClass: MatchOnCityCategoryRepository
+    },
+    {
+      provide: 'IMatchOnCityBrandRepository',
+      useClass: MatchOnCityBrandRepository
     },
 
     /* ======================================
@@ -188,7 +220,16 @@ import { GetFravegaCategoriesTreeRepository } from 'src/core/drivers/repositorie
     ResolveFravegaAttributes,
     ResolveFravegaPrices,
     BuildFravegaPayload,
-    PublishFravegaProduct
+    PublishFravegaProduct,
+
+    /* ======================================
+       ONCITY INTERACTORS
+    ====================================== */
+    ResolveOnCityBrand,
+    ResolveOnCityCategory,
+    ResolveOnCityPrices,
+    BuildOnCityPayload,
+    PublishOncityProduct
   ]
 })
 export class ProcessPublicationJobsModule {}

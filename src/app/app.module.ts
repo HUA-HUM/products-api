@@ -15,6 +15,7 @@ import { ExecutePublicationsModule } from './module/publisher/execute/ExecutePub
 import { GetPendingMarketplaceChangesModule } from './module/marketplace-changes/source/GetPendingMarketplaceChanges.Module';
 import { ProcessMarketplaceChangesModule } from './module/marketplace-changes/process/ProcessMarketplaceChanges.Module';
 import { ExecuteManualUpdateModule } from './module/marketplace-changes/manual/ExecuteManualUpdate.Module';
+import { RunMarketplaceChangesModule } from './module/marketplace-changes/run/RunMarketplaceChanges.Module';
 
 @Module({
   imports: [
@@ -36,7 +37,8 @@ import { ExecuteManualUpdateModule } from './module/marketplace-changes/manual/E
     ExecutePublicationsModule,
     GetPendingMarketplaceChangesModule,
     ProcessMarketplaceChangesModule,
-    ExecuteManualUpdateModule
+    ExecuteManualUpdateModule,
+    RunMarketplaceChangesModule
   ]
 })
 export class AppModule {}

@@ -4,6 +4,7 @@ import { IUpdateJobRepository } from 'src/core/adapters/repositories/madre/publi
 
 import { PublishMegatoneProduct } from '../../megatone/PublishMegatoneProduct';
 import { PublishFravegaProduct } from '../../fravega/PublishFravegaProduct';
+import { PublishOncityProduct } from '../../oncity/PublishOncityProduct';
 
 export class ProcessPublicationJobs {
   constructor(
@@ -14,7 +15,8 @@ export class ProcessPublicationJobs {
     private readonly updateRepository: IUpdateJobRepository,
 
     private readonly publishMegatone: PublishMegatoneProduct,
-    private readonly publishFravega: PublishFravegaProduct
+    private readonly publishFravega: PublishFravegaProduct,
+    private readonly publishOncity: PublishOncityProduct
   ) {}
 
   async execute(): Promise<void> {
@@ -46,6 +48,10 @@ export class ProcessPublicationJobs {
 
           case 'fravega':
             result = await this.publishFravega.execute(job.sku);
+            break;
+
+          case 'oncity':
+            result = await this.publishOncity.execute(job.sku);
             break;
 
           default:

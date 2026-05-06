@@ -1,18 +1,26 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { MarketplaceActionResult } from 'src/core/entitis/marketplace-changes/MarketplaceActionResult';
+import { IGetProductSyncItemsRepository } from 'src/core/adapters/repositories/madre/product-sync/IGetProductSyncItemsRepository';
 import { IUpdateFravegaStockRepository } from 'src/core/adapters/repositories/marketplace/fravega/products/update-stock/IUpdateFravegaStockRepository';
 import { UpdateFravegaStockRequest } from 'src/core/entitis/marketplace-api/fravega/products/update-stock/UpdateFravegaStockRequest';
+import {
+  buildNotPublishedMarketplaceMessage,
+  isNotPublishedMarketplaceMessage,
+  normalizeMarketplacePublicationError
+} from '../shared/MarketplacePublicationState';
 
 @Injectable()
 export class UpdateFravegaStock {
   constructor(
+    @Inject('IGetProductSyncItemsRepository')
+    private readonly syncItems: IGetProductSyncItemsRepository,
+
     @Inject('IUpdateFravegaStockRepository')
     private readonly driver: IUpdateFravegaStockRepository
   ) {}
 
   async execute(params: { sku: string; valorNuevo: string }): Promise<MarketplaceActionResult> {
     const startedAt = Date.now();
-    console.log(`[MKT-CHANGES] Update fravega stock | SKU=${params.sku} | value=${params.valorNuevo}`);
 
     try {
       if (params.valorNuevo === null || params.valorNuevo === undefined || String(params.valorNuevo).trim() === '') {
@@ -25,11 +33,13 @@ export class UpdateFravegaStock {
         throw new Error(`Invalid valorNuevo (must be integer >= 0): ${params.valorNuevo}`);
       }
 
-      const payload: UpdateFravegaStockRequest = { quantity };
+      const snapshot = await this.syncItems.getBySellerSkuAndMarketplace(params.sku, 'fravega');
 
-      console.log(
-        `[MKT-CHANGES] Fravega stock payload | SKU=${params.sku} | refId=${params.sku} | quantity=${quantity}`
-      );
+      if (!snapshot) {
+        throw new Error(buildNotPublishedMarketplaceMessage(params.sku, 'fravega'));
+      }
+
+      const payload: UpdateFravegaStockRequest = { quantity };
 
       await this.driver.updateByRefId(params.sku, payload);
 
@@ -41,8 +51,10 @@ export class UpdateFravegaStock {
         durationMs: Date.now() - startedAt
       };
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.log(`[MKT-CHANGES] Fravega stock update FAILED | SKU=${params.sku} | error=${message}`);
+      const message = normalizeMarketplacePublicationError(error, params.sku, 'fravega');
+      if (!isNotPublishedMarketplaceMessage(message)) {
+        console.log(`[MKT-CHANGES] Fravega stock update FAILED | SKU=${params.sku} | error=${message}`);
+      }
 
       return {
         marketplace: 'fravega',

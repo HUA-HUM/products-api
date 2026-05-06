@@ -3,6 +3,10 @@ import { MarketplaceActionResult } from 'src/core/entitis/marketplace-changes/Ma
 import { IGetProductSyncItemsRepository } from 'src/core/adapters/repositories/madre/product-sync/IGetProductSyncItemsRepository';
 import { IUpdateStockRepository } from 'src/core/adapters/repositories/marketplace/oncity/products/update-stock/IUpdateStockRepository';
 import { OnCityUpdateStockRequest } from 'src/core/entitis/marketplace-api/oncity/products/update-stock/UpdateStockRequest';
+import {
+  buildNotPublishedMarketplaceMessage,
+  isNotPublishedMarketplaceMessage
+} from '../shared/MarketplacePublicationState';
 
 @Injectable()
 export class UpdateOnCityStock {
@@ -16,7 +20,6 @@ export class UpdateOnCityStock {
 
   async execute(params: { sku: string; valorNuevo: string }): Promise<MarketplaceActionResult> {
     const startedAt = Date.now();
-    console.log(`[MKT-CHANGES] Update oncity stock | SKU=${params.sku} | value=${params.valorNuevo}`);
 
     try {
       if (params.valorNuevo === null || params.valorNuevo === undefined || String(params.valorNuevo).trim() === '') {
@@ -32,7 +35,7 @@ export class UpdateOnCityStock {
       const snapshot = await this.syncItems.getBySellerSkuAndMarketplace(params.sku, 'oncity');
 
       if (!snapshot) {
-        throw new Error(`No sync_item found for sku=${params.sku} marketplace=oncity`);
+        throw new Error(buildNotPublishedMarketplaceMessage(params.sku, 'oncity'));
       }
 
       const skuId = Number(snapshot.marketplaceSku);
@@ -58,7 +61,9 @@ export class UpdateOnCityStock {
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.log(`[MKT-CHANGES] OnCity stock update FAILED | SKU=${params.sku} | error=${message}`);
+      if (!isNotPublishedMarketplaceMessage(message)) {
+        console.log(`[MKT-CHANGES] OnCity stock update FAILED | SKU=${params.sku} | error=${message}`);
+      }
 
       return {
         marketplace: 'oncity',

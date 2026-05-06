@@ -6,6 +6,7 @@ export interface MadreProductDto {
   description: string;
 
   categoryId: string;
+  categoryPath?: string;
   meliStatus?: string;
   amzStatus?: string;
 
@@ -28,4 +29,5 @@ export interface MadreProductDto {
   };
 
   updatedAt: string;
+  shippingTime?: number;
 }

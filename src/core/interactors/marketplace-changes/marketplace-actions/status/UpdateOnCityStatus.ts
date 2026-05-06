@@ -5,6 +5,10 @@ import { IGetOncityProductRepository } from 'src/core/adapters/repositories/mark
 import { IUpdateStatusProductRepository } from 'src/core/adapters/repositories/marketplace/oncity/products/update-status/IUpdateStatusProductRepository';
 import { mapDeltaStatus } from './mapper/MapDeltaStatus';
 import { mapOnCityRawToUpdateRequest } from './mapper/MapOnCityRawToUpdateRequest';
+import {
+  buildNotPublishedMarketplaceMessage,
+  isNotPublishedMarketplaceMessage
+} from '../shared/MarketplacePublicationState';
 
 @Injectable()
 export class UpdateOnCityStatus {
@@ -21,7 +25,6 @@ export class UpdateOnCityStatus {
 
   async execute(params: { sku: string; valorNuevo: string }): Promise<MarketplaceActionResult> {
     const startedAt = Date.now();
-    console.log(`[MKT-CHANGES] Update oncity status | SKU=${params.sku} | value=${params.valorNuevo}`);
 
     try {
       const desired = mapDeltaStatus(params.valorNuevo);
@@ -30,7 +33,7 @@ export class UpdateOnCityStatus {
       const snapshot = await this.syncItems.getBySellerSkuAndMarketplace(params.sku, 'oncity');
 
       if (!snapshot) {
-        throw new Error(`No sync_item found for sku=${params.sku} marketplace=oncity`);
+        throw new Error(buildNotPublishedMarketplaceMessage(params.sku, 'oncity'));
       }
 
       const skuId = Number(snapshot.marketplaceSku);
@@ -67,7 +70,9 @@ export class UpdateOnCityStatus {
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.log(`[MKT-CHANGES] OnCity status update FAILED | SKU=${params.sku} | error=${message}`);
+      if (!isNotPublishedMarketplaceMessage(message)) {
+        console.log(`[MKT-CHANGES] OnCity status update FAILED | SKU=${params.sku} | error=${message}`);
+      }
 
       return {
         marketplace: 'oncity',

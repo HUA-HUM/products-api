@@ -12,7 +12,7 @@ export class ResolveOnCityPrice {
   constructor(private readonly config: ConfigService) {}
 
   resolve(precioLista: number): OnCityPriceResolved {
-    const discount = Number(this.config.get<string>('ONCITY_PROMO_DISCOUNT') ?? 5);
+    const discount = Number(this.config.get<string>('ONCITY_PROMO_DISCOUNT') ?? 15);
     const listPrice = Math.round(precioLista);
     const costPrice = Math.round(listPrice * (1 - discount / 100));
 

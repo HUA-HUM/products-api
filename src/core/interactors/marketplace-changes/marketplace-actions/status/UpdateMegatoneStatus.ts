@@ -3,6 +3,10 @@ import { MarketplaceActionResult } from 'src/core/entitis/marketplace-changes/Ma
 import { IGetProductSyncItemsRepository } from 'src/core/adapters/repositories/madre/product-sync/IGetProductSyncItemsRepository';
 import { IUpdateMegatoneProductStatusRepository } from 'src/core/adapters/repositories/marketplace/megatone/products/update-status/IUpdateMegatoneProductStatusRepository';
 import { mapDeltaStatus } from './mapper/MapDeltaStatus';
+import {
+  buildNotPublishedMarketplaceMessage,
+  isNotPublishedMarketplaceMessage
+} from '../shared/MarketplacePublicationState';
 
 const MEGATONE_USER_ID = 389;
 
@@ -18,7 +22,6 @@ export class UpdateMegatoneStatus {
 
   async execute(params: { sku: string; valorNuevo: string }): Promise<MarketplaceActionResult> {
     const startedAt = Date.now();
-    console.log(`[MKT-CHANGES] Update megatone status | SKU=${params.sku} | value=${params.valorNuevo}`);
 
     try {
       const desired = mapDeltaStatus(params.valorNuevo);
@@ -27,7 +30,7 @@ export class UpdateMegatoneStatus {
       const snapshot = await this.syncItems.getBySellerSkuAndMarketplace(params.sku, 'megatone');
 
       if (!snapshot) {
-        throw new Error(`No sync_item found for sku=${params.sku} marketplace=megatone`);
+        throw new Error(buildNotPublishedMarketplaceMessage(params.sku, 'megatone'));
       }
 
       const publicationId = Number(snapshot.externalId);
@@ -60,7 +63,9 @@ export class UpdateMegatoneStatus {
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.log(`[MKT-CHANGES] Megatone status update FAILED | SKU=${params.sku} | error=${message}`);
+      if (!isNotPublishedMarketplaceMessage(message)) {
+        console.log(`[MKT-CHANGES] Megatone status update FAILED | SKU=${params.sku} | error=${message}`);
+      }
 
       return {
         marketplace: 'megatone',
