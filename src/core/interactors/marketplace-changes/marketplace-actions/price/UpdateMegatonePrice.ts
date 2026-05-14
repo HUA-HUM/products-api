@@ -43,20 +43,21 @@ export class UpdateMegatonePrice {
         throw new Error(`Invalid publicationId (externalId) for sku=${params.sku}: ${snapshot.externalId}`);
       }
 
-      const prices = this.resolvePrice.resolve(precioLista);
+      const prices = await this.resolvePrice.resolve(params.sku, precioLista);
 
       const payload: UpdateMegatoneProductsPayload = {
         items: [
           {
             publicationId,
             precioLista: prices.precioLista,
-            precioPromocional: prices.precioPromocional
+            precioPromocional: prices.precioPromocional,
+            porcentajeDescuento: prices.porcentajeDescuento
           }
         ]
       };
 
       console.log(
-        `[MKT-CHANGES] Megatone payload | SKU=${params.sku} | publicationId=${publicationId} | lista=${prices.precioLista} | promo=${prices.precioPromocional}`
+        `[MKT-CHANGES] Megatone payload | SKU=${params.sku} | publicationId=${publicationId} | lista=${prices.precioLista} | promo=${prices.precioPromocional} | descuento=${prices.porcentajeDescuento}%`
       );
 
       const response = await this.driver.update(payload);

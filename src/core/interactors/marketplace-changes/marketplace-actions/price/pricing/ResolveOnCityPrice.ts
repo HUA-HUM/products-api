@@ -1,5 +1,6 @@
-import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { Inject, Injectable } from '@nestjs/common';
+import { IGetProfitabilityRepository } from 'src/core/adapters/repositories/pricing-api/GetProfitability/IGetProfitabilityRepository';
+import { resolveRoundedPromotion } from './ResolveRoundedPromotion';
 
 export interface OnCityPriceResolved {
   listPrice: number;
@@ -9,13 +10,24 @@ export interface OnCityPriceResolved {
 
 @Injectable()
 export class ResolveOnCityPrice {
-  constructor(private readonly config: ConfigService) {}
+  constructor(
+    @Inject('IGetProfitabilityRepository')
+    private readonly profitabilityRepository: IGetProfitabilityRepository
+  ) {}
 
-  resolve(precioLista: number): OnCityPriceResolved {
-    const discount = Number(this.config.get<string>('ONCITY_PROMO_DISCOUNT') ?? 15);
-    const listPrice = Math.round(precioLista);
-    const costPrice = Math.round(listPrice * (1 - discount / 100));
+  async resolve(sku: string, precioLista: number): Promise<OnCityPriceResolved> {
+    const profitability = await this.profitabilityRepository.execute({
+      sku,
+      salePrice: Math.round(precioLista),
+      salesChannel: 'oncity'
+    });
 
-    return { listPrice, costPrice, markup: discount };
+    const roundedPromotion = resolveRoundedPromotion(precioLista, profitability.economics.cost);
+
+    return {
+      listPrice: roundedPromotion.listPrice,
+      costPrice: roundedPromotion.promoPrice,
+      markup: roundedPromotion.discountPercent
+    };
   }
 }
