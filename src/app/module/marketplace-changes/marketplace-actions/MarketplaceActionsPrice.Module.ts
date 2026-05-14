@@ -11,6 +11,7 @@ import { GetProductSyncItemsRepository } from 'src/core/drivers/repositories/mad
 import { UpdateMegatoneProductsRepository } from 'src/core/drivers/repositories/marketplace-api/megatone/products/update-price-stock/UpdateMegatoneProductsRepository';
 import { UpdatePriceRepository as UpdateOnCityPriceDriver } from 'src/core/drivers/repositories/marketplace-api/oncity/products/update-price/UpdatePriceRepository';
 import { UpdateFravegaPriceRepository } from 'src/core/drivers/repositories/marketplace-api/fravega/products/update-price/UpdateFravegaPriceRepository';
+import { GetProfitabilityRepository } from 'src/core/drivers/repositories/pricing-api/GetProfitabilityRepository';
 
 @Module({
   providers: [
@@ -24,6 +25,7 @@ import { UpdateFravegaPriceRepository } from 'src/core/drivers/repositories/mark
 
     MadreHttpClient,
     MarketplaceHttpClient,
+    GetProfitabilityRepository,
 
     {
       provide: 'IGetProductSyncItemsRepository',
@@ -40,6 +42,10 @@ import { UpdateFravegaPriceRepository } from 'src/core/drivers/repositories/mark
     {
       provide: 'IUpdateFravegaPriceRepository',
       useClass: UpdateFravegaPriceRepository
+    },
+    {
+      provide: 'IGetProfitabilityRepository',
+      useClass: GetProfitabilityRepository
     }
   ],
   exports: [UpdateMegatonePrice, UpdateOnCityPrice, UpdateFravegaPrice]

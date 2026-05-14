@@ -130,7 +130,7 @@ export class UpdatePriceAndStock {
     let precioPromocional: number | undefined;
 
     if (priceChanged) {
-      const promo = this.resolveMegatonePrice.resolve(madrePrice);
+      const promo = await this.resolveMegatonePrice.resolve(sellerSku, madrePrice);
       precioLista = promo.precioLista;
       precioPromocional = promo.precioPromocional;
 

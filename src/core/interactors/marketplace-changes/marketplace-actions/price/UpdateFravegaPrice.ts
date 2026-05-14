@@ -38,7 +38,7 @@ export class UpdateFravegaPrice {
         throw new Error(buildNotPublishedMarketplaceMessage(params.sku, 'fravega'));
       }
 
-      const prices = this.resolvePrice.resolve(precioLista);
+      const prices = await this.resolvePrice.resolve(params.sku, precioLista);
 
       const payload: UpdateFravegaPriceRequest = {
         list: prices.list,
@@ -48,7 +48,9 @@ export class UpdateFravegaPrice {
 
       await this.driver.updateByRefId(params.sku, payload);
 
-      console.log(`[MKT-CHANGES] Fravega response | SKU=${params.sku} | OK`);
+      console.log(
+        `[MKT-CHANGES] Fravega response | SKU=${params.sku} | OK | list=${prices.list} | sale=${prices.sale} | net=${prices.net} | discount=${prices.discountPercent}%`
+      );
 
       return {
         marketplace: 'fravega',

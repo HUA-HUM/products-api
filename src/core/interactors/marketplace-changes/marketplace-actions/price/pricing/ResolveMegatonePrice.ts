@@ -1,20 +1,33 @@
-import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { Inject, Injectable } from '@nestjs/common';
+import { IGetProfitabilityRepository } from 'src/core/adapters/repositories/pricing-api/GetProfitability/IGetProfitabilityRepository';
+import { resolveRoundedPromotion } from './ResolveRoundedPromotion';
 
 export interface MegatonePriceResolved {
   precioLista: number;
   precioPromocional: number;
+  porcentajeDescuento: number;
 }
 
 @Injectable()
 export class ResolveMegatonePrice {
-  constructor(private readonly config: ConfigService) {}
+  constructor(
+    @Inject('IGetProfitabilityRepository')
+    private readonly profitabilityRepository: IGetProfitabilityRepository
+  ) {}
 
-  resolve(precioLista: number): MegatonePriceResolved {
-    const discount = Number(this.config.get<string>('MEGATONE_PROMO_DISCOUNT') ?? 15);
-    const lista = Math.round(precioLista);
-    const promo = Math.round(lista * (1 - discount / 100));
+  async resolve(sku: string, precioLista: number): Promise<MegatonePriceResolved> {
+    const profitability = await this.profitabilityRepository.execute({
+      sku,
+      salePrice: Math.round(precioLista),
+      salesChannel: 'megatone'
+    });
 
-    return { precioLista: lista, precioPromocional: promo };
+    const roundedPromotion = resolveRoundedPromotion(precioLista, profitability.economics.cost);
+
+    return {
+      precioLista: roundedPromotion.listPrice,
+      precioPromocional: roundedPromotion.promoPrice,
+      porcentajeDescuento: roundedPromotion.discountPercent
+    };
   }
 }

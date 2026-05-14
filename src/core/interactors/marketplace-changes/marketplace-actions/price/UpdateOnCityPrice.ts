@@ -43,7 +43,7 @@ export class UpdateOnCityPrice {
         throw new Error(`Invalid skuId (marketplaceSku) for sku=${params.sku}: ${snapshot.marketplaceSku}`);
       }
 
-      const prices = this.resolvePrice.resolve(precioLista);
+      const prices = await this.resolvePrice.resolve(params.sku, precioLista);
 
       const payload: OnCityUpdatePriceRequest = {
         skuId,

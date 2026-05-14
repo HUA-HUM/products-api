@@ -1,24 +1,39 @@
-import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { Inject, Injectable } from '@nestjs/common';
+import { IGetProfitabilityRepository } from 'src/core/adapters/repositories/pricing-api/GetProfitability/IGetProfitabilityRepository';
+import { resolveRoundedPromotion } from './ResolveRoundedPromotion';
 
 export interface FravegaPriceResolved {
   list: number;
   sale: number;
   net: number;
+  discountPercent: number;
 }
 
 const IVA_RATE = 21;
 
 @Injectable()
 export class ResolveFravegaPrice {
-  constructor(private readonly config: ConfigService) {}
+  constructor(
+    @Inject('IGetProfitabilityRepository')
+    private readonly profitabilityRepository: IGetProfitabilityRepository
+  ) {}
 
-  resolve(precioLista: number): FravegaPriceResolved {
-    const discount = Number(this.config.get<string>('FRAVEGA_PROMO_DISCOUNT') ?? 15);
-    const list = Math.round(precioLista);
-    const sale = Math.round(list * (1 - discount / 100));
+  async resolve(sku: string, precioLista: number): Promise<FravegaPriceResolved> {
+    const profitability = await this.profitabilityRepository.execute({
+      sku,
+      salePrice: Math.round(precioLista),
+      salesChannel: 'fravega'
+    });
+
+    const roundedPromotion = resolveRoundedPromotion(precioLista, profitability.economics.cost);
+    const sale = roundedPromotion.promoPrice;
     const net = Math.round(sale / (1 + IVA_RATE / 100));
 
-    return { list, sale, net };
+    return {
+      list: roundedPromotion.listPrice,
+      sale,
+      net,
+      discountPercent: roundedPromotion.discountPercent
+    };
   }
 }

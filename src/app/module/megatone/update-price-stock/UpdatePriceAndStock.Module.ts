@@ -9,6 +9,7 @@ import { UpdateProductSyncItemRepository } from 'src/core/drivers/repositories/m
 import { GetMadreProductsRepository } from 'src/core/drivers/repositories/madre-api/products/get/GetMadreProductsRepository';
 import { UpdateMegatoneProductsRepository } from 'src/core/drivers/repositories/marketplace-api/megatone/products/update-price-stock/UpdateMegatoneProductsRepository';
 import { ResolveMegatonePrice } from 'src/core/interactors/marketplace-changes/marketplace-actions/price/pricing/ResolveMegatonePrice';
+import { GetProfitabilityRepository } from 'src/core/drivers/repositories/pricing-api/GetProfitabilityRepository';
 
 @Module({
   controllers: [UpdatePriceAndStockController],
@@ -18,6 +19,7 @@ import { ResolveMegatonePrice } from 'src/core/interactors/marketplace-changes/m
 
     MarketplaceHttpClient,
     MadreHttpClient,
+    GetProfitabilityRepository,
 
     ResolveMegatonePrice,
 
@@ -36,6 +38,10 @@ import { ResolveMegatonePrice } from 'src/core/interactors/marketplace-changes/m
     {
       provide: 'IUpdateMegatoneProductsRepository',
       useClass: UpdateMegatoneProductsRepository
+    },
+    {
+      provide: 'IGetProfitabilityRepository',
+      useClass: GetProfitabilityRepository
     }
   ]
 })
