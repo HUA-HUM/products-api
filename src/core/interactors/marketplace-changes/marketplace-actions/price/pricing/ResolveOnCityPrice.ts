@@ -22,6 +22,16 @@ export class ResolveOnCityPrice {
       salesChannel: 'oncity'
     });
 
+    if (profitability.status.profitable === false) {
+      const listPrice = Math.round(precioLista);
+
+      return {
+        listPrice,
+        costPrice: listPrice,
+        markup: 0
+      };
+    }
+
     const roundedPromotion = resolveRoundedPromotion(precioLista, profitability.economics.cost);
 
     return {
