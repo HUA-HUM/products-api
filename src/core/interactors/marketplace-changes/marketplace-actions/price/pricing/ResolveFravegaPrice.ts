@@ -25,6 +25,19 @@ export class ResolveFravegaPrice {
       salesChannel: 'fravega'
     });
 
+    if (profitability.status.profitable === false) {
+      const list = Math.round(precioLista);
+      const sale = list;
+      const net = Math.round(sale / (1 + IVA_RATE / 100));
+
+      return {
+        list,
+        sale,
+        net,
+        discountPercent: 0
+      };
+    }
+
     const roundedPromotion = resolveRoundedPromotion(precioLista, profitability.economics.cost);
     const sale = roundedPromotion.promoPrice;
     const net = Math.round(sale / (1 + IVA_RATE / 100));

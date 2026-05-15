@@ -22,6 +22,16 @@ export class ResolveMegatonePrice {
       salesChannel: 'megatone'
     });
 
+    if (profitability.status.profitable === false) {
+      const list = Math.round(precioLista);
+
+      return {
+        precioLista: list,
+        precioPromocional: list,
+        porcentajeDescuento: 0
+      };
+    }
+
     const roundedPromotion = resolveRoundedPromotion(precioLista, profitability.economics.cost);
 
     return {
