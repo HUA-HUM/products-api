@@ -3,7 +3,7 @@ import { ImportMarketplaceService } from 'src/app/services/queues/import-marketp
 import { ProductSyncMarketplace } from 'src/core/entitis/madre-api/product-sync/ProductSyncMarketplace';
 
 const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
-const MARKETPLACES: ProductSyncMarketplace[] = ['fravega', 'megatone', 'oncity'];
+const MARKETPLACES: ProductSyncMarketplace[] = ['fravega', 'megatone', 'oncity', 'google-merchant'];
 
 @Injectable()
 export class ImportMarketplaceCronService implements OnModuleInit, OnModuleDestroy {

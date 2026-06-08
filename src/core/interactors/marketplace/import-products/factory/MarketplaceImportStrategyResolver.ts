@@ -4,6 +4,7 @@ import { MarketplaceImportStrategy } from '../MarketplaceImportStrategy';
 import { MegatoneImportStrategy } from '../strategies/MegatoneImportStrategy';
 import { OnCityImportStrategy } from '../strategies/OnCityImportStrategy';
 import { FravegaImportStrategy } from '../strategies/FravegaImportStrategy';
+import { GoogleMerchantImportStrategy } from '../strategies/GoogleMerchantImportStrategy';
 
 @Injectable()
 export class MarketplaceImportStrategyResolver {
@@ -12,9 +13,10 @@ export class MarketplaceImportStrategyResolver {
   constructor(
     private readonly megatoneStrategy: MegatoneImportStrategy,
     private readonly onCityStrategy: OnCityImportStrategy,
-    private readonly fravegaStrategy: FravegaImportStrategy
+    private readonly fravegaStrategy: FravegaImportStrategy,
+    private readonly googleMerchantStrategy: GoogleMerchantImportStrategy
   ) {
-    this.strategies = [this.megatoneStrategy, this.onCityStrategy, this.fravegaStrategy];
+    this.strategies = [this.megatoneStrategy, this.onCityStrategy, this.fravegaStrategy, this.googleMerchantStrategy];
   }
 
   resolve(marketplace: ProductSyncMarketplace): MarketplaceImportStrategy {
