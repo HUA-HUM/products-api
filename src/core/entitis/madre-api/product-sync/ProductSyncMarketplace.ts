@@ -1,1 +1,1 @@
-export type ProductSyncMarketplace = 'megatone' | 'oncity' | 'fravega';
+export type ProductSyncMarketplace = 'megatone' | 'oncity' | 'fravega' | 'google-merchant';
