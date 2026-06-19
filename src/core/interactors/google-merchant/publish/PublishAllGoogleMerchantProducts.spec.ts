@@ -1,0 +1,213 @@
+import { GetGoogleMerchantActiveProductsRepository } from 'src/core/drivers/repositories/madre-api/google-merchant/GetGoogleMerchantActiveProductsRepository';
+import { MadreGoogleMerchantActiveProduct } from 'src/core/entitis/madre-api/google-merchant/get/GoogleMerchantActiveProductsResponse';
+import { CreateGoogleMerchantProductRequest } from 'src/core/entitis/marketplace-api/google-merchant/products/create/CreateGoogleMerchantProductRequest';
+import { PublishAllGoogleMerchantProducts } from './PublishAllGoogleMerchantProducts';
+
+const buildProduct = (overrides: Partial<MadreGoogleMerchantActiveProduct> = {}): MadreGoogleMerchantActiveProduct => ({
+  id: '694347',
+  brand_id: '5861',
+  name: 'Yamaha New OEM AL.PROP 12 1/4 X 9 663-45956-01-00-1',
+  images: ['41jV4M7gH+L.jpg'],
+  description:
+    'Brand new, genuine Yamaha Al.Prop 12 1/4 X 9. This is a factory original equipment part, not aftermarket.',
+  price: '179.97',
+  is_active: 1,
+  in_stock: 1,
+  asin: 'B005C58VUY',
+  sale_price: '670700.28',
+  features: '["SKU: 663-45956-01-00-1","Sold Each","Please verify your own fitment"]',
+  ...overrides
+});
+
+describe('PublishAllGoogleMerchantProducts', () => {
+  it('maps active Madre products, publishes them and saves successful publications in sync-items', async () => {
+    const create = jest.fn().mockResolvedValue({
+      success: true,
+      data: {
+        name: 'accounts/123/products/online:es:AR:B005C58VUY',
+        contentLanguage: 'es',
+        feedLabel: 'AR'
+      }
+    });
+    const syncExecute = jest.fn().mockResolvedValue(undefined);
+    const service = new PublishAllGoogleMerchantProducts(
+      {
+        listActive: jest.fn().mockResolvedValue({
+          items: [buildProduct()],
+          limit: 50,
+          offset: 0,
+          count: 1,
+          total: 1,
+          hasNext: false,
+          nextOffset: null
+        }),
+        getByAsin: jest.fn()
+      },
+      {
+        create
+      },
+      {
+        execute: syncExecute
+      }
+    );
+
+    const summary = await service.execute();
+
+    expect(summary).toMatchObject({
+      pagesProcessed: 1,
+      itemsFetched: 1,
+      published: {
+        success: 1,
+        failed: 0
+      },
+      sync: {
+        success: 1,
+        failed: 0
+      },
+      hasNext: false,
+      nextOffset: null,
+      failures: [],
+      syncFailures: []
+    });
+
+    expect(create).toHaveBeenCalledWith({
+      sku: 'B005C58VUY',
+      title: 'Yamaha New OEM AL.PROP 12 1/4 X 9 663-45956-01-00-1',
+      description:
+        'Brand new, genuine Yamaha Al.Prop 12 1/4 X 9. This is a factory original equipment part, not aftermarket.',
+      price: 670700.28,
+      stock: 1,
+      brand: '5861',
+      imageUrl: 'https://images-na.ssl-images-amazon.com/images/I/41jV4M7gH+L.jpg',
+      productUrl: 'https://loquieroaca.com/products/694347'
+    } satisfies CreateGoogleMerchantProductRequest);
+
+    expect(syncExecute).toHaveBeenCalledWith({
+      marketplace: 'google-merchant',
+      items: [
+        {
+          externalId: 'accounts/123/products/online:es:AR:B005C58VUY',
+          sellerSku: 'B005C58VUY',
+          marketplaceSku: 'B005C58VUY',
+          price: 670700.28,
+          stock: 1,
+          status: 'ACTIVE',
+          raw: {
+            offerId: 'B005C58VUY',
+            contentLanguage: 'es',
+            feedLabel: 'AR',
+            productId: '694347',
+            request: expect.objectContaining({
+              sku: 'B005C58VUY',
+              productUrl: 'https://loquieroaca.com/products/694347',
+              imageUrl: 'https://images-na.ssl-images-amazon.com/images/I/41jV4M7gH+L.jpg'
+            }),
+            response: {
+              name: 'accounts/123/products/online:es:AR:B005C58VUY',
+              contentLanguage: 'es',
+              feedLabel: 'AR'
+            },
+            publishedAt: expect.any(String)
+          }
+        }
+      ]
+    });
+  });
+
+  it('returns marketplace error details when publication fails', async () => {
+    const create = jest.fn().mockResolvedValue({
+      success: false,
+      message: '[MARKETPLACE POST] /internal/google-merchant/products | statusCode=400 | title is required',
+      statusCode: 400,
+      details: {
+        message: 'title is required'
+      }
+    });
+    const syncExecute = jest.fn().mockResolvedValue(undefined);
+    const service = new PublishAllGoogleMerchantProducts(
+      {
+        listActive: jest.fn().mockResolvedValue({
+          items: [buildProduct()],
+          limit: 50,
+          offset: 0,
+          count: 1,
+          total: 1,
+          hasNext: false,
+          nextOffset: null
+        }),
+        getByAsin: jest.fn()
+      },
+      {
+        create
+      },
+      {
+        execute: syncExecute
+      }
+    );
+
+    const summary = await service.execute();
+
+    expect(summary.published).toEqual({
+      success: 0,
+      failed: 1
+    });
+    expect(summary.sync).toEqual({
+      success: 0,
+      failed: 0
+    });
+    expect(summary.failures).toEqual([
+      {
+        sku: 'B005C58VUY',
+        error: '[MARKETPLACE POST] /internal/google-merchant/products | statusCode=400 | title is required',
+        statusCode: 400,
+        details: {
+          message: 'title is required'
+        }
+      }
+    ]);
+    expect(syncExecute).not.toHaveBeenCalled();
+  });
+});
+
+describe('GetGoogleMerchantActiveProductsRepository', () => {
+  const previousInternalApiKey = process.env.INTERNAL_API_KEY;
+
+  beforeEach(() => {
+    process.env.INTERNAL_API_KEY = 'test-key';
+  });
+
+  afterAll(() => {
+    process.env.INTERNAL_API_KEY = previousInternalApiKey;
+  });
+
+  it('normalizes raw Madre product lists into a paginated response', async () => {
+    const httpClient = {
+      get: jest.fn().mockResolvedValue([buildProduct(), buildProduct({ id: '2', asin: 'B000000002' })])
+    };
+    const repository = new GetGoogleMerchantActiveProductsRepository(httpClient as any);
+
+    const response = await repository.listActive(2, 0);
+
+    expect(httpClient.get).toHaveBeenCalledWith(
+      '/internal/google-merchant/products/active',
+      {
+        limit: 2,
+        offset: 0
+      },
+      {
+        headers: {
+          'x-internal-api-key': 'test-key'
+        }
+      }
+    );
+    expect(response).toMatchObject({
+      items: expect.any(Array),
+      limit: 2,
+      offset: 0,
+      count: 2,
+      total: 2,
+      hasNext: true,
+      nextOffset: 2
+    });
+  });
+});
