@@ -4,6 +4,7 @@ import {
   MarketplaceProductIdAndSkuItem
 } from 'src/core/adapters/repositories/madre/Sync_items/GetIdProductInMarketplaces/IGetIdProductInMarketplacesRepository';
 import { IDeleteGoogleMerchantProductRepository } from 'src/core/adapters/repositories/marketplace/google-merchant/products/delete/IDeleteGoogleMerchantProductRepository';
+import { IGetProductSyncItemsRepository } from 'src/core/adapters/repositories/madre/product-sync/IGetProductSyncItemsRepository';
 
 export type DeleteAllGoogleMerchantProductsInput = {
   limit?: number;
@@ -35,6 +36,9 @@ export class DeleteAllGoogleMerchantProducts {
   constructor(
     @Inject('IGetIdProductInMarketplacesRepository')
     private readonly getIdsAndSkus: IGetIdProductInMarketplacesRepository,
+
+    @Inject('IGetProductSyncItemsRepository')
+    private readonly getProductSyncItems: IGetProductSyncItemsRepository,
 
     @Inject('IDeleteGoogleMerchantProductRepository')
     private readonly deleteGoogleMerchantProduct: IDeleteGoogleMerchantProductRepository
@@ -89,7 +93,17 @@ export class DeleteAllGoogleMerchantProducts {
         const results = await Promise.all(
           batch.map(async item => {
             try {
-              const response = await this.deleteGoogleMerchantProduct.execute(item.sellerSku);
+              const syncItem = await this.getProductSyncItems.getBySellerSku(item.sellerSku);
+              const rawPayload = syncItem.raw_payload ?? {};
+              const offerId = String(rawPayload.offerId ?? item.sellerSku);
+              const contentLanguage = String(rawPayload.contentLanguage ?? 'es');
+              const feedLabel = String(rawPayload.feedLabel ?? 'AR');
+
+              const response = await this.deleteGoogleMerchantProduct.execute({
+                offerId,
+                contentLanguage,
+                feedLabel
+              });
 
               if (response.deleted === true) {
                 return { sku: item.sellerSku, success: true as const };

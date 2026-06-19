@@ -7,13 +7,29 @@ import { MarketplaceHttpClient } from '../../../http/MarketplaceHttpClient';
 export class DeleteGoogleMerchantProductRepository implements IDeleteGoogleMerchantProductRepository {
   constructor(private readonly httpClient: MarketplaceHttpClient) {}
 
-  async execute(sku: string): Promise<DeleteGoogleMerchantProductResponse> {
-    if (!sku?.trim()) {
-      throw new Error('sku is required');
+  async execute(params: {
+    offerId: string;
+    contentLanguage: string;
+    feedLabel: string;
+  }): Promise<DeleteGoogleMerchantProductResponse> {
+    const offerId = params.offerId?.trim();
+    const contentLanguage = params.contentLanguage?.trim();
+    const feedLabel = params.feedLabel?.trim();
+
+    if (!offerId) {
+      throw new Error('offerId is required');
+    }
+
+    if (!contentLanguage) {
+      throw new Error('contentLanguage is required');
+    }
+
+    if (!feedLabel) {
+      throw new Error('feedLabel is required');
     }
 
     return this.httpClient.delete<DeleteGoogleMerchantProductResponse>(
-      `/internal/google-merchant/products/${encodeURIComponent(sku.trim())}`
+      `/internal/google-merchant/products/${encodeURIComponent(offerId)}?contentLanguage=${encodeURIComponent(contentLanguage)}&feedLabel=${encodeURIComponent(feedLabel)}`
     );
   }
 }

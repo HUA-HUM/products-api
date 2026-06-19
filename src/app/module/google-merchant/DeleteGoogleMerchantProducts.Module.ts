@@ -3,6 +3,7 @@ import { DeleteAllGoogleMerchantProductsController } from 'src/app/controller/go
 import { DeleteAllGoogleMerchantProducts } from 'src/core/interactors/google-merchant/delete/DeleteAllGoogleMerchantProducts';
 import { GetIdProductInMarketplacesRepository } from 'src/core/drivers/repositories/madre-api/Sync_items/GetIdProductInMarketplaces/GetIdProductInMarketplacesRepository';
 import { MadreHttpClient } from 'src/core/drivers/repositories/madre-api/http/MadreHttpClient';
+import { GetProductSyncItemsRepository } from 'src/core/drivers/repositories/madre-api/product-sync/GetProductSyncItemsRepository';
 import { MarketplaceHttpClient } from 'src/core/drivers/repositories/marketplace-api/http/MarketplaceHttpClient';
 import { DeleteGoogleMerchantProductRepository } from 'src/core/drivers/repositories/marketplace-api/google-merchant/products/delete/DeleteGoogleMerchantProductRepository';
 
@@ -15,6 +16,10 @@ import { DeleteGoogleMerchantProductRepository } from 'src/core/drivers/reposito
     {
       provide: 'IGetIdProductInMarketplacesRepository',
       useClass: GetIdProductInMarketplacesRepository
+    },
+    {
+      provide: 'IGetProductSyncItemsRepository',
+      useClass: GetProductSyncItemsRepository
     },
     {
       provide: 'IDeleteGoogleMerchantProductRepository',
