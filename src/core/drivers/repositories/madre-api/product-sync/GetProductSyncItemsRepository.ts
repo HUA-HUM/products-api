@@ -11,6 +11,7 @@ export interface ProductSyncItemDto {
   stock: number;
   status: string;
   last_seen_at: string;
+  raw_payload?: Record<string, any> | null;
 }
 
 export interface PaginatedSyncItemsResponse {
@@ -58,12 +59,12 @@ export class GetProductSyncItemsRepository implements IGetProductSyncItemsReposi
     });
   }
 
-  async getBySellerSku(sellerSku: string): Promise<any> {
+  async getBySellerSku(sellerSku: string): Promise<ProductSyncItemDto> {
     if (!sellerSku) {
       throw new Error('sellerSku is required');
     }
 
-    return this.httpClient.get<any>(`/internal/marketplace/products/${sellerSku}`);
+    return this.httpClient.get<ProductSyncItemDto>(`/internal/marketplace/products/${sellerSku}`);
   }
 
   async getBySellerSkuAndMarketplace(
