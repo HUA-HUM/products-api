@@ -58,6 +58,18 @@ export class MarketplaceHttpClient {
   }
 
   /* ======================================
+     DELETE
+  ====================================== */
+  async delete<T>(url: string): Promise<T> {
+    try {
+      const response = await this.client.delete<T>(url);
+      return response.data;
+    } catch (error) {
+      throw this.handleError('DELETE', url, error);
+    }
+  }
+
+  /* ======================================
      ERROR HANDLER
   ====================================== */
   private handleError(method: string, url: string, error: unknown): MarketplaceHttpError {

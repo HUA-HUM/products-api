@@ -16,6 +16,7 @@ import { GetPendingMarketplaceChangesModule } from './module/marketplace-changes
 import { ProcessMarketplaceChangesModule } from './module/marketplace-changes/process/ProcessMarketplaceChanges.Module';
 import { ExecuteManualUpdateModule } from './module/marketplace-changes/manual/ExecuteManualUpdate.Module';
 import { RunMarketplaceChangesModule } from './module/marketplace-changes/run/RunMarketplaceChanges.Module';
+import { DeleteGoogleMerchantProductsModule } from './module/google-merchant/DeleteGoogleMerchantProducts.Module';
 
 @Module({
   imports: [
@@ -38,7 +39,8 @@ import { RunMarketplaceChangesModule } from './module/marketplace-changes/run/Ru
     GetPendingMarketplaceChangesModule,
     ProcessMarketplaceChangesModule,
     ExecuteManualUpdateModule,
-    RunMarketplaceChangesModule
+    RunMarketplaceChangesModule,
+    DeleteGoogleMerchantProductsModule
   ]
 })
 export class AppModule {}

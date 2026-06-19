@@ -10,7 +10,7 @@ export class GetIdProductInMarketplacesRepository implements IGetIdProductInMark
   constructor(private readonly httpClient: MadreHttpClient) {}
 
   async list(params: {
-    marketplace: 'fravega' | 'megatone' | 'oncity';
+    marketplace: 'fravega' | 'megatone' | 'oncity' | 'google-merchant';
     limit?: number;
     offset?: number;
   }): Promise<MarketplaceProductIdsAndSkusResponse> {

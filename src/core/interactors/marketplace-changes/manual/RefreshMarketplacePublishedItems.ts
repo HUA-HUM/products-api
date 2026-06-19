@@ -11,15 +11,17 @@ import { ExecuteManualPriceUpdate } from './ExecuteManualPriceUpdate';
 import { ExecuteManualStatusUpdate } from './ExecuteManualStatusUpdate';
 import { ExecuteManualStockUpdate } from './ExecuteManualStockUpdate';
 
+type RefreshSupportedMarketplace = Exclude<MarketplaceProductIdAndSkuMarketplace, 'google-merchant'>;
+
 export type RefreshMarketplacePublishedItemsInput = {
-  marketplace: MarketplaceProductIdAndSkuMarketplace;
+  marketplace: RefreshSupportedMarketplace;
   limit?: number;
   offset?: number;
   maxPages?: number;
 };
 
 export type RefreshMarketplacePublishedItemsSummary = {
-  marketplace: MarketplaceProductIdAndSkuMarketplace;
+  marketplace: RefreshSupportedMarketplace;
   pagesProcessed: number;
   itemsFetched: number;
   itemsMatchedFromMadre: number;
