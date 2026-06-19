@@ -1,4 +1,4 @@
-export type MarketplaceProductIdAndSkuMarketplace = 'fravega' | 'megatone' | 'oncity';
+export type MarketplaceProductIdAndSkuMarketplace = 'fravega' | 'megatone' | 'oncity' | 'google-merchant';
 
 export type MarketplaceProductIdAndSkuItem = {
   id: string;
