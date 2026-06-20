@@ -4,7 +4,10 @@ import { ISendBulkProductSyncRepository } from 'src/core/adapters/repositories/m
 import { ICreateGoogleMerchantProductRepository } from 'src/core/adapters/repositories/marketplace/google-merchant/products/create/ICreateGoogleMerchantProductRepository';
 import { MadreGoogleMerchantActiveProduct } from 'src/core/entitis/madre-api/google-merchant/get/GoogleMerchantActiveProductsResponse';
 import { BulkMarketplaceProductsDto } from 'src/core/entitis/madre-api/product-sync/dto/BulkMarketplaceProductsDto';
-import { CreateGoogleMerchantProductRequest } from 'src/core/entitis/marketplace-api/google-merchant/products/create/CreateGoogleMerchantProductRequest';
+import {
+  CreateGoogleMerchantProductRequest,
+  CreateGoogleMerchantProductResponse
+} from 'src/core/entitis/marketplace-api/google-merchant/products/create/CreateGoogleMerchantProductRequest';
 
 export type PublishAllGoogleMerchantProductsInput = {
   limit?: number;
@@ -122,7 +125,7 @@ export class PublishAllGoogleMerchantProducts {
           `[GOOGLE-MERCHANT][PUBLISH] publishing | productId=${product.id} | sku=${payload.sku} | price=${payload.price} | stock=${payload.stock}`
         );
 
-        const response = await this.createGoogleMerchantProduct.create(payload);
+        const response = await this.publishWithRetry(product, payload);
 
         if (response.success) {
           summary.published.success += 1;
@@ -177,6 +180,93 @@ export class PublishAllGoogleMerchantProducts {
     );
 
     return summary;
+  }
+
+  private async publishWithRetry(
+    product: MadreGoogleMerchantActiveProduct,
+    payload: CreateGoogleMerchantProductRequest
+  ): Promise<CreateGoogleMerchantProductResponse> {
+    const maxAttempts = this.resolvePositiveInteger(process.env.GOOGLE_MERCHANT_PUBLISH_MAX_ATTEMPTS, 3);
+    const baseDelayMs = this.resolveNonNegativeInteger(process.env.GOOGLE_MERCHANT_PUBLISH_RETRY_DELAY_MS, 1000);
+    let lastResponse: CreateGoogleMerchantProductResponse | null = null;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const response = await this.createGoogleMerchantProduct.create(payload);
+      lastResponse = response;
+
+      if (response.success) {
+        if (attempt > 1) {
+          this.logger.log(
+            `[GOOGLE-MERCHANT][PUBLISH] retry succeeded | productId=${product.id} | sku=${payload.sku} | attempt=${attempt}/${maxAttempts}`
+          );
+        }
+
+        return response;
+      }
+
+      if (!this.isRetryablePublishFailure(response) || attempt === maxAttempts) {
+        return response;
+      }
+
+      const delayMs = baseDelayMs * attempt;
+
+      this.logger.warn(
+        `[GOOGLE-MERCHANT][PUBLISH] retrying transient failure | productId=${product.id} | sku=${payload.sku} | attempt=${attempt}/${maxAttempts} | nextAttempt=${attempt + 1} | delayMs=${delayMs} | statusCode=${response.statusCode ?? 'unknown'} | reason=${response.message ?? 'GOOGLE_MERCHANT_CREATE_ERROR'}`
+      );
+
+      await this.delay(delayMs);
+    }
+
+    return (
+      lastResponse ?? {
+        success: false,
+        message: 'GOOGLE_MERCHANT_CREATE_ERROR'
+      }
+    );
+  }
+
+  private isRetryablePublishFailure(response: CreateGoogleMerchantProductResponse): boolean {
+    if (response.statusCode && [408, 429, 500, 502, 503, 504].includes(response.statusCode)) {
+      return true;
+    }
+
+    const errorText = `${response.message ?? ''} ${this.stringifyForLog(response.details)}`.toLowerCase();
+
+    return (
+      errorText.includes('timeout') ||
+      errorText.includes('timed out') ||
+      errorText.includes('econnreset') ||
+      errorText.includes('etimedout') ||
+      errorText.includes('socket hang up')
+    );
+  }
+
+  private resolvePositiveInteger(value: string | undefined, fallback: number): number {
+    const parsed = Number(value);
+
+    if (!Number.isFinite(parsed) || parsed < 1) {
+      return fallback;
+    }
+
+    return Math.floor(parsed);
+  }
+
+  private resolveNonNegativeInteger(value: string | undefined, fallback: number): number {
+    const parsed = Number(value);
+
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      return fallback;
+    }
+
+    return Math.floor(parsed);
+  }
+
+  private delay(ms: number): Promise<void> {
+    if (ms <= 0) {
+      return Promise.resolve();
+    }
+
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   private async savePublishedProductInSyncItems(
@@ -280,10 +370,13 @@ export class PublishAllGoogleMerchantProducts {
     const price = this.resolvePrice(product);
     const stock = Number(product.in_stock ?? 0) > 0 ? 1 : 0;
     const brand = String(product.brand_name ?? product.brand ?? product.brand_id ?? '').trim() || 'Sin marca';
-    const imageUrl = this.buildImageUrl(product.images?.[0]);
+    const imageUrls = this.buildImageUrls(product.images);
+    const imageUrl = imageUrls[0] ?? '';
     const productUrl = this.buildProductUrl(product);
+    const googleProductCategory = this.buildGoogleProductCategory(product);
+    const mpn = this.buildMpn(product, sku);
 
-    if (!sku || !title || !description || !price || !imageUrl || !productUrl) {
+    if (!sku || !title || !description || !price || !imageUrl || !productUrl || !googleProductCategory) {
       return null;
     }
 
@@ -295,7 +388,13 @@ export class PublishAllGoogleMerchantProducts {
       stock,
       brand,
       imageUrl,
-      productUrl
+      productUrl,
+      additionalImageUrls: imageUrls.slice(1),
+      condition: 'new',
+      googleProductCategory,
+      mpn,
+      identifierExists: this.buildIdentifierExists(sku, mpn),
+      shipping: this.buildShipping()
     };
   }
 
@@ -353,6 +452,12 @@ export class PublishAllGoogleMerchantProducts {
     return price;
   }
 
+  private buildImageUrls(images?: string[]): string[] {
+    return (images ?? [])
+      .map(image => this.buildImageUrl(image))
+      .filter((imageUrl): imageUrl is string => Boolean(imageUrl));
+  }
+
   private buildImageUrl(image?: string): string {
     if (!image) {
       return '';
@@ -363,6 +468,42 @@ export class PublishAllGoogleMerchantProducts {
     }
 
     return `${this.IMAGE_BASE_URL.replace(/\/+$/, '')}/${image.replace(/^\/+/, '')}`;
+  }
+
+  private buildGoogleProductCategory(product: MadreGoogleMerchantActiveProduct): string {
+    const categoryTree = product.categoryTree ?? [];
+    const categoryFromTree = categoryTree
+      .map(category => String(category?.name ?? '').trim())
+      .filter(Boolean)
+      .join(' > ');
+
+    if (categoryFromTree) {
+      return categoryFromTree;
+    }
+
+    return String(product.compuesto_amazon ?? '').trim();
+  }
+
+  private buildMpn(product: MadreGoogleMerchantActiveProduct, sku: string): string {
+    return String(product.partNumber ?? product.model ?? sku).trim();
+  }
+
+  private buildIdentifierExists(sku: string, mpn: string): boolean {
+    return Boolean(sku || mpn);
+  }
+
+  private buildShipping() {
+    return [
+      {
+        country: 'AR',
+        service: 'Envio a domicilio',
+        price: 0,
+        minHandlingTime: 1,
+        maxHandlingTime: 3,
+        minTransitTime: 2,
+        maxTransitTime: 10
+      }
+    ];
   }
 
   private buildProductUrl(product: MadreGoogleMerchantActiveProduct): string {
