@@ -12,6 +12,11 @@ export interface MadreGoogleMerchantActiveProduct {
   asin: string | null;
   sale_price: string | number | null;
   features?: string | string[] | null;
+  categoryTree?: Array<{
+    name?: string | null;
+    catId?: string | number | null;
+  }> | null;
+  compuesto_amazon?: string | null;
   partNumber?: string | null;
   model?: string | null;
   slug?: string | null;

@@ -6,8 +6,9 @@ import { PublishAllGoogleMerchantProducts } from './PublishAllGoogleMerchantProd
 const buildProduct = (overrides: Partial<MadreGoogleMerchantActiveProduct> = {}): MadreGoogleMerchantActiveProduct => ({
   id: '694347',
   brand_id: '5861',
+  brand_name: 'Thule',
   name: 'Yamaha New OEM AL.PROP 12 1/4 X 9 663-45956-01-00-1',
-  images: ['41jV4M7gH+L.jpg'],
+  images: ['41jV4M7gH+L.jpg', '51BdvMc4kjL.jpg'],
   description:
     'Brand new, genuine Yamaha Al.Prop 12 1/4 X 9. This is a factory original equipment part, not aftermarket.',
   price: '179.97',
@@ -16,10 +17,31 @@ const buildProduct = (overrides: Partial<MadreGoogleMerchantActiveProduct> = {})
   asin: 'B005C58VUY',
   sale_price: '670700.28',
   features: '["SKU: 663-45956-01-00-1","Sold Each","Please verify your own fitment"]',
+  categoryTree: [
+    {
+      name: 'Vehicles & Parts',
+      catId: '888'
+    },
+    {
+      name: 'Vehicle Parts & Accessories',
+      catId: '999'
+    }
+  ],
+  partNumber: '692',
   ...overrides
 });
 
 describe('PublishAllGoogleMerchantProducts', () => {
+  const previousRetryDelay = process.env.GOOGLE_MERCHANT_PUBLISH_RETRY_DELAY_MS;
+
+  beforeEach(() => {
+    process.env.GOOGLE_MERCHANT_PUBLISH_RETRY_DELAY_MS = '0';
+  });
+
+  afterAll(() => {
+    process.env.GOOGLE_MERCHANT_PUBLISH_RETRY_DELAY_MS = previousRetryDelay;
+  });
+
   it('maps active Madre products, publishes them and saves successful publications in sync-items', async () => {
     const create = jest.fn().mockResolvedValue({
       success: true,
@@ -77,9 +99,25 @@ describe('PublishAllGoogleMerchantProducts', () => {
         'Brand new, genuine Yamaha Al.Prop 12 1/4 X 9. This is a factory original equipment part, not aftermarket.',
       price: 670700.28,
       stock: 1,
-      brand: '5861',
+      brand: 'Thule',
       imageUrl: 'https://images-na.ssl-images-amazon.com/images/I/41jV4M7gH+L.jpg',
-      productUrl: 'https://loquieroaca.com/products/694347'
+      productUrl: 'https://loquieroaca.com/products/694347',
+      additionalImageUrls: ['https://images-na.ssl-images-amazon.com/images/I/51BdvMc4kjL.jpg'],
+      condition: 'new',
+      googleProductCategory: 'Vehicles & Parts > Vehicle Parts & Accessories',
+      mpn: '692',
+      identifierExists: true,
+      shipping: [
+        {
+          country: 'AR',
+          service: 'Envio a domicilio',
+          price: 0,
+          minHandlingTime: 1,
+          maxHandlingTime: 3,
+          minTransitTime: 2,
+          maxTransitTime: 10
+        }
+      ]
     } satisfies CreateGoogleMerchantProductRequest);
 
     expect(syncExecute).toHaveBeenCalledWith({
@@ -100,7 +138,10 @@ describe('PublishAllGoogleMerchantProducts', () => {
             request: expect.objectContaining({
               sku: 'B005C58VUY',
               productUrl: 'https://loquieroaca.com/products/694347',
-              imageUrl: 'https://images-na.ssl-images-amazon.com/images/I/41jV4M7gH+L.jpg'
+              imageUrl: 'https://images-na.ssl-images-amazon.com/images/I/41jV4M7gH+L.jpg',
+              additionalImageUrls: ['https://images-na.ssl-images-amazon.com/images/I/51BdvMc4kjL.jpg'],
+              googleProductCategory: 'Vehicles & Parts > Vehicle Parts & Accessories',
+              mpn: '692'
             }),
             response: {
               name: 'accounts/123/products/online:es:AR:B005C58VUY',
@@ -166,6 +207,64 @@ describe('PublishAllGoogleMerchantProducts', () => {
       }
     ]);
     expect(syncExecute).not.toHaveBeenCalled();
+  });
+
+  it('retries transient Google Merchant upstream timeouts before failing the product', async () => {
+    const create = jest
+      .fn()
+      .mockResolvedValueOnce({
+        success: false,
+        message:
+          '[MARKETPLACE POST] /internal/google-merchant/products | statusCode=502 | Google Merchant rechazó la operación | timeout of 12000ms exceeded',
+        statusCode: 502,
+        details: {
+          message: 'Google Merchant rechazó la operación',
+          upstreamResponse: 'timeout of 12000ms exceeded'
+        }
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        data: {
+          name: 'accounts/123/products/online:es:AR:B005C58VUY',
+          contentLanguage: 'es',
+          feedLabel: 'AR'
+        }
+      });
+    const syncExecute = jest.fn().mockResolvedValue(undefined);
+    const service = new PublishAllGoogleMerchantProducts(
+      {
+        listActive: jest.fn().mockResolvedValue({
+          items: [buildProduct()],
+          limit: 50,
+          offset: 0,
+          count: 1,
+          total: 1,
+          hasNext: false,
+          nextOffset: null
+        }),
+        getByAsin: jest.fn()
+      },
+      {
+        create
+      },
+      {
+        execute: syncExecute
+      }
+    );
+
+    const summary = await service.execute();
+
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(summary.published).toEqual({
+      success: 1,
+      failed: 0
+    });
+    expect(summary.sync).toEqual({
+      success: 1,
+      failed: 0
+    });
+    expect(summary.failures).toEqual([]);
+    expect(syncExecute).toHaveBeenCalledTimes(1);
   });
 });
 
