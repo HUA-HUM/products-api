@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { ICheckProductExistsRepository } from 'src/core/adapters/repositories/madre/Sync_items/CheckProductExists/ICheckProductExistsRepository';
 import { IGetGoogleMerchantActiveProductsRepository } from 'src/core/adapters/repositories/madre/google-merchant/get/IGetGoogleMerchantActiveProductsRepository';
 import { ISendBulkProductSyncRepository } from 'src/core/adapters/repositories/madre/product-sync/ISendBulkProductSyncRepository';
 import { ICreateGoogleMerchantProductRepository } from 'src/core/adapters/repositories/marketplace/google-merchant/products/create/ICreateGoogleMerchantProductRepository';
@@ -22,6 +23,9 @@ export type PublishAllGoogleMerchantProductsSummary = {
     success: number;
     failed: number;
   };
+  skipped: {
+    alreadyExists: number;
+  };
   sync: {
     success: number;
     failed: number;
@@ -38,6 +42,10 @@ export type PublishAllGoogleMerchantProductsSummary = {
     sku: string;
     error: string;
   }>;
+  skippedItems: Array<{
+    sku: string;
+    reason: string;
+  }>;
 };
 
 @Injectable()
@@ -51,6 +59,9 @@ export class PublishAllGoogleMerchantProducts {
   constructor(
     @Inject('IGetGoogleMerchantActiveProductsRepository')
     private readonly getActiveProducts: IGetGoogleMerchantActiveProductsRepository,
+
+    @Inject('ICheckProductExistsRepository')
+    private readonly checkProductExists: ICheckProductExistsRepository,
 
     @Inject('ICreateGoogleMerchantProductRepository')
     private readonly createGoogleMerchantProduct: ICreateGoogleMerchantProductRepository,
@@ -76,6 +87,9 @@ export class PublishAllGoogleMerchantProducts {
         success: 0,
         failed: 0
       },
+      skipped: {
+        alreadyExists: 0
+      },
       sync: {
         success: 0,
         failed: 0
@@ -83,7 +97,8 @@ export class PublishAllGoogleMerchantProducts {
       hasNext: false,
       nextOffset: null,
       failures: [],
-      syncFailures: []
+      syncFailures: [],
+      skippedItems: []
     };
 
     this.logger.log(
@@ -117,6 +132,32 @@ export class PublishAllGoogleMerchantProducts {
           summary.failures.push({
             sku: String(product.asin ?? product.id ?? 'unknown'),
             error: 'unable to build payload'
+          });
+          continue;
+        }
+
+        const existsValidation = await this.validateProductDoesNotExist(product, payload);
+
+        if (!existsValidation.success) {
+          summary.published.failed += 1;
+          this.logger.error(
+            `[GOOGLE-MERCHANT][PUBLISH] exists check failed | productId=${product.id} | sku=${payload.sku} | reason=${existsValidation.error}`
+          );
+          summary.failures.push({
+            sku: payload.sku,
+            error: existsValidation.error
+          });
+          continue;
+        }
+
+        if (existsValidation.exists) {
+          summary.skipped.alreadyExists += 1;
+          this.logger.log(
+            `[GOOGLE-MERCHANT][PUBLISH] skipped already exists | productId=${product.id} | sku=${payload.sku}`
+          );
+          summary.skippedItems.push({
+            sku: payload.sku,
+            reason: 'PRODUCT_ALREADY_EXISTS'
           });
           continue;
         }
@@ -176,10 +217,34 @@ export class PublishAllGoogleMerchantProducts {
     summary.nextOffset = nextOffset;
 
     this.logger.log(
-      `[GOOGLE-MERCHANT][PUBLISH] finished | pages=${summary.pagesProcessed} | fetched=${summary.itemsFetched} | publishedOk=${summary.published.success} | publishedFailed=${summary.published.failed} | syncOk=${summary.sync.success} | syncFailed=${summary.sync.failed} | hasNext=${summary.hasNext} | nextOffset=${summary.nextOffset ?? 'null'}`
+      `[GOOGLE-MERCHANT][PUBLISH] finished | pages=${summary.pagesProcessed} | fetched=${summary.itemsFetched} | publishedOk=${summary.published.success} | publishedFailed=${summary.published.failed} | skippedAlreadyExists=${summary.skipped.alreadyExists} | syncOk=${summary.sync.success} | syncFailed=${summary.sync.failed} | hasNext=${summary.hasNext} | nextOffset=${summary.nextOffset ?? 'null'}`
     );
 
     return summary;
+  }
+
+  private async validateProductDoesNotExist(
+    product: MadreGoogleMerchantActiveProduct,
+    payload: CreateGoogleMerchantProductRequest
+  ): Promise<{ success: true; exists: boolean } | { success: false; error: string }> {
+    try {
+      this.logger.log(`[GOOGLE-MERCHANT][PUBLISH] exists check | productId=${product.id} | sku=${payload.sku}`);
+
+      const response = await this.checkProductExists.exists({
+        marketplace: 'google-merchant',
+        sellerSku: payload.sku
+      });
+
+      return {
+        success: true,
+        exists: response.exists === true
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error?.message ?? 'PRODUCT_EXISTS_CHECK_ERROR'
+      };
+    }
   }
 
   private async publishWithRetry(

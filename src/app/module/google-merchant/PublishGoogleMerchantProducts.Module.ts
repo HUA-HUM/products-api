@@ -6,6 +6,7 @@ import { MadreHttpClient } from 'src/core/drivers/repositories/madre-api/http/Ma
 import { MarketplaceHttpClient } from 'src/core/drivers/repositories/marketplace-api/http/MarketplaceHttpClient';
 import { CreateGoogleMerchantProductRepository } from 'src/core/drivers/repositories/marketplace-api/google-merchant/products/create/CreateGoogleMerchantProductRepository';
 import { SendBulkProductSyncRepository } from 'src/core/drivers/repositories/madre-api/product-sync/SendBulkProductSyncRepository';
+import { CheckProductExistsRepository } from 'src/core/drivers/repositories/madre-api/Sync_items/CheckProductExists/CheckProductExistsRepository';
 
 @Module({
   controllers: [PublishAllGoogleMerchantProductsController],
@@ -16,6 +17,10 @@ import { SendBulkProductSyncRepository } from 'src/core/drivers/repositories/mad
     {
       provide: 'IGetGoogleMerchantActiveProductsRepository',
       useClass: GetGoogleMerchantActiveProductsRepository
+    },
+    {
+      provide: 'ICheckProductExistsRepository',
+      useClass: CheckProductExistsRepository
     },
     {
       provide: 'ICreateGoogleMerchantProductRepository',
