@@ -42,6 +42,14 @@ export type PublishAllGoogleMerchantProductsSummary = {
     sku: string;
     error: string;
   }>;
+  pageFetchFailures: Array<{
+    page: number;
+    offset: number;
+    limit: number;
+    error: string;
+    statusCode?: number;
+    details?: unknown;
+  }>;
   skippedItems: Array<{
     sku: string;
     reason: string;
@@ -98,6 +106,7 @@ export class PublishAllGoogleMerchantProducts {
       nextOffset: null,
       failures: [],
       syncFailures: [],
+      pageFetchFailures: [],
       skippedItems: []
     };
 
@@ -106,7 +115,27 @@ export class PublishAllGoogleMerchantProducts {
     );
 
     do {
-      const page = await this.getActiveProducts.listActive(limit, offset);
+      const pageNumber = pagesProcessed + 1;
+      const pageResult = await this.fetchPageWithRetry(limit, offset, pageNumber);
+
+      if (!pageResult.success) {
+        hasNext = true;
+        nextOffset = offset;
+        summary.pageFetchFailures.push({
+          page: pageNumber,
+          offset,
+          limit,
+          error: pageResult.error,
+          statusCode: pageResult.statusCode,
+          details: pageResult.details
+        });
+        this.logger.error(
+          `[GOOGLE-MERCHANT][PUBLISH] page fetch failed | page=${pageNumber} | offset=${offset} | limit=${limit} | statusCode=${pageResult.statusCode ?? 'unknown'} | reason=${pageResult.error} | details=${this.stringifyForLog(pageResult.details)}`
+        );
+        break;
+      }
+
+      const page = pageResult.page;
 
       pagesProcessed += 1;
       itemsFetched += page.items.length;
@@ -217,10 +246,66 @@ export class PublishAllGoogleMerchantProducts {
     summary.nextOffset = nextOffset;
 
     this.logger.log(
-      `[GOOGLE-MERCHANT][PUBLISH] finished | pages=${summary.pagesProcessed} | fetched=${summary.itemsFetched} | publishedOk=${summary.published.success} | publishedFailed=${summary.published.failed} | skippedAlreadyExists=${summary.skipped.alreadyExists} | syncOk=${summary.sync.success} | syncFailed=${summary.sync.failed} | hasNext=${summary.hasNext} | nextOffset=${summary.nextOffset ?? 'null'}`
+      `[GOOGLE-MERCHANT][PUBLISH] finished | pages=${summary.pagesProcessed} | fetched=${summary.itemsFetched} | publishedOk=${summary.published.success} | publishedFailed=${summary.published.failed} | skippedAlreadyExists=${summary.skipped.alreadyExists} | syncOk=${summary.sync.success} | syncFailed=${summary.sync.failed} | pageFetchFailed=${summary.pageFetchFailures.length} | hasNext=${summary.hasNext} | nextOffset=${summary.nextOffset ?? 'null'}`
     );
 
     return summary;
+  }
+
+  private async fetchPageWithRetry(
+    limit: number,
+    offset: number,
+    pageNumber: number
+  ): Promise<
+    | { success: true; page: Awaited<ReturnType<IGetGoogleMerchantActiveProductsRepository['listActive']>> }
+    | { success: false; error: string; statusCode?: number; details?: unknown }
+  > {
+    const maxAttempts = this.resolvePositiveInteger(process.env.GOOGLE_MERCHANT_MADRE_FETCH_MAX_ATTEMPTS, 3);
+    const baseDelayMs = this.resolveNonNegativeInteger(process.env.GOOGLE_MERCHANT_MADRE_FETCH_RETRY_DELAY_MS, 1000);
+    let lastError: unknown = null;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const page = await this.getActiveProducts.listActive(limit, offset);
+
+        if (attempt > 1) {
+          this.logger.log(
+            `[GOOGLE-MERCHANT][PUBLISH] page fetch retry succeeded | page=${pageNumber} | offset=${offset} | attempt=${attempt}/${maxAttempts}`
+          );
+        }
+
+        return {
+          success: true,
+          page
+        };
+      } catch (error) {
+        lastError = error;
+
+        if (!this.isRetryableError(error) || attempt === maxAttempts) {
+          return {
+            success: false,
+            error: this.resolveErrorMessage(error, 'MADRE_ACTIVE_PRODUCTS_FETCH_ERROR'),
+            statusCode: this.resolveErrorStatusCode(error),
+            details: this.resolveErrorDetails(error)
+          };
+        }
+
+        const delayMs = baseDelayMs * attempt;
+
+        this.logger.warn(
+          `[GOOGLE-MERCHANT][PUBLISH] retrying Madre page fetch | page=${pageNumber} | offset=${offset} | attempt=${attempt}/${maxAttempts} | nextAttempt=${attempt + 1} | delayMs=${delayMs} | statusCode=${this.resolveErrorStatusCode(error) ?? 'unknown'} | reason=${this.resolveErrorMessage(error, 'MADRE_ACTIVE_PRODUCTS_FETCH_ERROR')}`
+        );
+
+        await this.delay(delayMs);
+      }
+    }
+
+    return {
+      success: false,
+      error: this.resolveErrorMessage(lastError, 'MADRE_ACTIVE_PRODUCTS_FETCH_ERROR'),
+      statusCode: this.resolveErrorStatusCode(lastError),
+      details: this.resolveErrorDetails(lastError)
+    };
   }
 
   private async validateProductDoesNotExist(
@@ -304,6 +389,50 @@ export class PublishAllGoogleMerchantProducts {
       errorText.includes('etimedout') ||
       errorText.includes('socket hang up')
     );
+  }
+
+  private isRetryableError(error: unknown): boolean {
+    const statusCode = this.resolveErrorStatusCode(error);
+
+    if (statusCode && [408, 429, 500, 502, 503, 504].includes(statusCode)) {
+      return true;
+    }
+
+    const errorText = `${this.resolveErrorMessage(error, '')} ${this.stringifyForLog(this.resolveErrorDetails(error))}`
+      .toLowerCase();
+
+    return (
+      errorText.includes('timeout') ||
+      errorText.includes('timed out') ||
+      errorText.includes('econnaborted') ||
+      errorText.includes('econnreset') ||
+      errorText.includes('etimedout') ||
+      errorText.includes('socket hang up')
+    );
+  }
+
+  private resolveErrorMessage(error: unknown, fallback: string): string {
+    const message = (error as any)?.message;
+
+    if (typeof message === 'string' && message.trim()) {
+      return message;
+    }
+
+    return fallback;
+  }
+
+  private resolveErrorStatusCode(error: unknown): number | undefined {
+    const statusCode = (error as any)?.statusCode;
+
+    if (typeof statusCode === 'number') {
+      return statusCode;
+    }
+
+    return undefined;
+  }
+
+  private resolveErrorDetails(error: unknown): unknown {
+    return (error as any)?.response ?? (error as any)?.details;
   }
 
   private resolvePositiveInteger(value: string | undefined, fallback: number): number {

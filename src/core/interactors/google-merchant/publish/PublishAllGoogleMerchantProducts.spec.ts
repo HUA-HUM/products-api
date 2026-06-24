@@ -35,19 +35,22 @@ const buildService = (params: {
   create: jest.Mock;
   syncExecute: jest.Mock;
   exists?: jest.Mock;
+  listActive?: jest.Mock;
   products?: MadreGoogleMerchantActiveProduct[];
 }) =>
   new PublishAllGoogleMerchantProducts(
     {
-      listActive: jest.fn().mockResolvedValue({
-        items: params.products ?? [buildProduct()],
-        limit: 50,
-        offset: 0,
-        count: params.products?.length ?? 1,
-        total: params.products?.length ?? 1,
-        hasNext: false,
-        nextOffset: null
-      }),
+      listActive:
+        params.listActive ??
+        jest.fn().mockResolvedValue({
+          items: params.products ?? [buildProduct()],
+          limit: 50,
+          offset: 0,
+          count: params.products?.length ?? 1,
+          total: params.products?.length ?? 1,
+          hasNext: false,
+          nextOffset: null
+        }),
       getByAsin: jest.fn()
     },
     {
@@ -63,13 +66,33 @@ const buildService = (params: {
 
 describe('PublishAllGoogleMerchantProducts', () => {
   const previousRetryDelay = process.env.GOOGLE_MERCHANT_PUBLISH_RETRY_DELAY_MS;
+  const previousMadreFetchRetryDelay = process.env.GOOGLE_MERCHANT_MADRE_FETCH_RETRY_DELAY_MS;
+  const previousMadreFetchMaxAttempts = process.env.GOOGLE_MERCHANT_MADRE_FETCH_MAX_ATTEMPTS;
 
   beforeEach(() => {
     process.env.GOOGLE_MERCHANT_PUBLISH_RETRY_DELAY_MS = '0';
+    process.env.GOOGLE_MERCHANT_MADRE_FETCH_RETRY_DELAY_MS = '0';
+    process.env.GOOGLE_MERCHANT_MADRE_FETCH_MAX_ATTEMPTS = '3';
   });
 
   afterAll(() => {
-    process.env.GOOGLE_MERCHANT_PUBLISH_RETRY_DELAY_MS = previousRetryDelay;
+    if (previousRetryDelay === undefined) {
+      delete process.env.GOOGLE_MERCHANT_PUBLISH_RETRY_DELAY_MS;
+    } else {
+      process.env.GOOGLE_MERCHANT_PUBLISH_RETRY_DELAY_MS = previousRetryDelay;
+    }
+
+    if (previousMadreFetchRetryDelay === undefined) {
+      delete process.env.GOOGLE_MERCHANT_MADRE_FETCH_RETRY_DELAY_MS;
+    } else {
+      process.env.GOOGLE_MERCHANT_MADRE_FETCH_RETRY_DELAY_MS = previousMadreFetchRetryDelay;
+    }
+
+    if (previousMadreFetchMaxAttempts === undefined) {
+      delete process.env.GOOGLE_MERCHANT_MADRE_FETCH_MAX_ATTEMPTS;
+    } else {
+      process.env.GOOGLE_MERCHANT_MADRE_FETCH_MAX_ATTEMPTS = previousMadreFetchMaxAttempts;
+    }
   });
 
   it('maps active Madre products, publishes them and saves successful publications in sync-items', async () => {
@@ -105,6 +128,7 @@ describe('PublishAllGoogleMerchantProducts', () => {
       nextOffset: null,
       failures: [],
       syncFailures: [],
+      pageFetchFailures: [],
       skippedItems: []
     });
 
@@ -277,6 +301,112 @@ describe('PublishAllGoogleMerchantProducts', () => {
     });
     expect(create).not.toHaveBeenCalled();
     expect(syncExecute).not.toHaveBeenCalled();
+  });
+
+  it('retries transient Madre page fetch timeouts before publishing the page', async () => {
+    const listActive = jest
+      .fn()
+      .mockRejectedValueOnce({
+        message: '[MADRE GET] /internal/google-merchant/products/active',
+        statusCode: 500,
+        response: {
+          message: 'timeout of 30000ms exceeded',
+          code: 'ECONNABORTED'
+        }
+      })
+      .mockResolvedValueOnce({
+        items: [buildProduct()],
+        limit: 50,
+        offset: 0,
+        count: 1,
+        total: 1,
+        hasNext: false,
+        nextOffset: null
+      });
+    const create = jest.fn().mockResolvedValue({
+      success: true,
+      data: {
+        name: 'accounts/123/products/online:es:AR:B005C58VUY'
+      }
+    });
+    const syncExecute = jest.fn().mockResolvedValue(undefined);
+    const service = buildService({ create, syncExecute, listActive });
+
+    const summary = await service.execute();
+
+    expect(listActive).toHaveBeenCalledTimes(2);
+    expect(summary.pageFetchFailures).toEqual([]);
+    expect(summary.published).toEqual({
+      success: 1,
+      failed: 0
+    });
+    expect(summary.sync).toEqual({
+      success: 1,
+      failed: 0
+    });
+  });
+
+  it('returns a partial summary when Madre page fetch keeps failing after processed products', async () => {
+    process.env.GOOGLE_MERCHANT_MADRE_FETCH_MAX_ATTEMPTS = '2';
+
+    const listActive = jest
+      .fn()
+      .mockResolvedValueOnce({
+        items: [buildProduct()],
+        limit: 50,
+        offset: 0,
+        count: 1,
+        total: 2,
+        hasNext: true,
+        nextOffset: 50
+      })
+      .mockRejectedValue({
+        message: '[MADRE GET] /internal/google-merchant/products/active',
+        statusCode: 500,
+        response: {
+          message: 'timeout of 30000ms exceeded',
+          code: 'ECONNABORTED'
+        }
+      });
+    const create = jest.fn().mockResolvedValue({
+      success: true,
+      data: {
+        name: 'accounts/123/products/online:es:AR:B005C58VUY'
+      }
+    });
+    const syncExecute = jest.fn().mockResolvedValue(undefined);
+    const service = buildService({ create, syncExecute, listActive });
+
+    const summary = await service.execute();
+
+    expect(listActive).toHaveBeenCalledTimes(3);
+    expect(summary).toMatchObject({
+      pagesProcessed: 1,
+      itemsFetched: 1,
+      published: {
+        success: 1,
+        failed: 0
+      },
+      sync: {
+        success: 1,
+        failed: 0
+      },
+      hasNext: true,
+      nextOffset: 50,
+      pageFetchFailures: [
+        {
+          page: 2,
+          offset: 50,
+          limit: 50,
+          error: '[MADRE GET] /internal/google-merchant/products/active',
+          statusCode: 500,
+          details: {
+            message: 'timeout of 30000ms exceeded',
+            code: 'ECONNABORTED'
+          }
+        }
+      ]
+    });
   });
 });
 
