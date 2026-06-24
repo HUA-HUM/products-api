@@ -1,6 +1,8 @@
+import { Injectable } from '@nestjs/common';
 import { ICheckProductExistsRepository } from 'src/core/adapters/repositories/madre/Sync_items/CheckProductExists/ICheckProductExistsRepository';
 import { MadreHttpClient } from '../../http/MadreHttpClient';
 
+@Injectable()
 export class CheckProductExistsRepository implements ICheckProductExistsRepository {
   constructor(private readonly http: MadreHttpClient) {}
 
