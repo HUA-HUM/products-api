@@ -31,6 +31,36 @@ const buildProduct = (overrides: Partial<MadreGoogleMerchantActiveProduct> = {})
   ...overrides
 });
 
+const buildService = (params: {
+  create: jest.Mock;
+  syncExecute: jest.Mock;
+  exists?: jest.Mock;
+  products?: MadreGoogleMerchantActiveProduct[];
+}) =>
+  new PublishAllGoogleMerchantProducts(
+    {
+      listActive: jest.fn().mockResolvedValue({
+        items: params.products ?? [buildProduct()],
+        limit: 50,
+        offset: 0,
+        count: params.products?.length ?? 1,
+        total: params.products?.length ?? 1,
+        hasNext: false,
+        nextOffset: null
+      }),
+      getByAsin: jest.fn()
+    },
+    {
+      exists: params.exists ?? jest.fn().mockResolvedValue({ exists: false })
+    },
+    {
+      create: params.create
+    },
+    {
+      execute: params.syncExecute
+    }
+  );
+
 describe('PublishAllGoogleMerchantProducts', () => {
   const previousRetryDelay = process.env.GOOGLE_MERCHANT_PUBLISH_RETRY_DELAY_MS;
 
@@ -52,26 +82,8 @@ describe('PublishAllGoogleMerchantProducts', () => {
       }
     });
     const syncExecute = jest.fn().mockResolvedValue(undefined);
-    const service = new PublishAllGoogleMerchantProducts(
-      {
-        listActive: jest.fn().mockResolvedValue({
-          items: [buildProduct()],
-          limit: 50,
-          offset: 0,
-          count: 1,
-          total: 1,
-          hasNext: false,
-          nextOffset: null
-        }),
-        getByAsin: jest.fn()
-      },
-      {
-        create
-      },
-      {
-        execute: syncExecute
-      }
-    );
+    const exists = jest.fn().mockResolvedValue({ exists: false });
+    const service = buildService({ create, syncExecute, exists });
 
     const summary = await service.execute();
 
@@ -82,6 +94,9 @@ describe('PublishAllGoogleMerchantProducts', () => {
         success: 1,
         failed: 0
       },
+      skipped: {
+        alreadyExists: 0
+      },
       sync: {
         success: 1,
         failed: 0
@@ -89,7 +104,13 @@ describe('PublishAllGoogleMerchantProducts', () => {
       hasNext: false,
       nextOffset: null,
       failures: [],
-      syncFailures: []
+      syncFailures: [],
+      skippedItems: []
+    });
+
+    expect(exists).toHaveBeenCalledWith({
+      marketplace: 'google-merchant',
+      sellerSku: 'B005C58VUY'
     });
 
     expect(create).toHaveBeenCalledWith({
@@ -165,26 +186,7 @@ describe('PublishAllGoogleMerchantProducts', () => {
       }
     });
     const syncExecute = jest.fn().mockResolvedValue(undefined);
-    const service = new PublishAllGoogleMerchantProducts(
-      {
-        listActive: jest.fn().mockResolvedValue({
-          items: [buildProduct()],
-          limit: 50,
-          offset: 0,
-          count: 1,
-          total: 1,
-          hasNext: false,
-          nextOffset: null
-        }),
-        getByAsin: jest.fn()
-      },
-      {
-        create
-      },
-      {
-        execute: syncExecute
-      }
-    );
+    const service = buildService({ create, syncExecute });
 
     const summary = await service.execute();
 
@@ -231,26 +233,7 @@ describe('PublishAllGoogleMerchantProducts', () => {
         }
       });
     const syncExecute = jest.fn().mockResolvedValue(undefined);
-    const service = new PublishAllGoogleMerchantProducts(
-      {
-        listActive: jest.fn().mockResolvedValue({
-          items: [buildProduct()],
-          limit: 50,
-          offset: 0,
-          count: 1,
-          total: 1,
-          hasNext: false,
-          nextOffset: null
-        }),
-        getByAsin: jest.fn()
-      },
-      {
-        create
-      },
-      {
-        execute: syncExecute
-      }
-    );
+    const service = buildService({ create, syncExecute });
 
     const summary = await service.execute();
 
@@ -265,6 +248,35 @@ describe('PublishAllGoogleMerchantProducts', () => {
     });
     expect(summary.failures).toEqual([]);
     expect(syncExecute).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips products that already exist in Madre sync-items', async () => {
+    const create = jest.fn();
+    const syncExecute = jest.fn();
+    const exists = jest.fn().mockResolvedValue({ exists: true });
+    const service = buildService({ create, syncExecute, exists });
+
+    const summary = await service.execute();
+
+    expect(summary.published).toEqual({
+      success: 0,
+      failed: 0
+    });
+    expect(summary.skipped).toEqual({
+      alreadyExists: 1
+    });
+    expect(summary.skippedItems).toEqual([
+      {
+        sku: 'B005C58VUY',
+        reason: 'PRODUCT_ALREADY_EXISTS'
+      }
+    ]);
+    expect(exists).toHaveBeenCalledWith({
+      marketplace: 'google-merchant',
+      sellerSku: 'B005C58VUY'
+    });
+    expect(create).not.toHaveBeenCalled();
+    expect(syncExecute).not.toHaveBeenCalled();
   });
 });
 
