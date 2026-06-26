@@ -38,7 +38,7 @@ export class GoogleMerchantPublishProductsQueueService implements IGoogleMerchan
             type: 'exponential',
             delay: this.resolveNonNegativeInteger(process.env.GOOGLE_MERCHANT_QUEUE_JOB_BACKOFF_MS, 30_000)
           },
-          jobId: `${item.runId}:${sku || productId || randomUUID()}`
+          jobId: this.buildJobId(item.runId, sku || productId || randomUUID())
         }
       );
 
@@ -54,6 +54,18 @@ export class GoogleMerchantPublishProductsQueueService implements IGoogleMerchan
 
   private resolveSku(item: EnqueueGoogleMerchantPublishProductInput): string {
     return String(item.product.asin ?? item.product.id ?? '').trim();
+  }
+
+  private buildJobId(runId: string, productKey: string): string {
+    return `${this.sanitizeJobIdPart(runId)}-${this.sanitizeJobIdPart(productKey)}`;
+  }
+
+  private sanitizeJobIdPart(value: string): string {
+    const sanitized = String(value)
+      .trim()
+      .replace(/:/g, '_');
+
+    return sanitized || randomUUID();
   }
 
   private resolvePositiveInteger(value: string | undefined, fallback: number): number {
