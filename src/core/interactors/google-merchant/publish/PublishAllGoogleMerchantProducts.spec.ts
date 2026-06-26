@@ -48,7 +48,7 @@ const buildPage = (params: {
   nextOffset: params.nextOffset ?? null
 });
 
-const buildQueueingService = (params: { listActive?: jest.Mock; enqueueProducts?: jest.Mock }) =>
+const buildQueueingService = (params: { listActive?: jest.Mock; enqueueProducts?: jest.Mock; exists?: jest.Mock }) =>
   new PublishAllGoogleMerchantProducts(
     {
       listActive: params.listActive ?? jest.fn().mockResolvedValue(buildPage({})),
@@ -64,6 +64,9 @@ const buildQueueingService = (params: { listActive?: jest.Mock; enqueueProducts?
             jobId: `${item.runId}:${item.product.asin ?? item.product.id}`
           }))
         )
+    },
+    {
+      exists: params.exists ?? jest.fn().mockResolvedValue({ exists: false })
     }
   );
 
@@ -106,6 +109,7 @@ describe('PublishAllGoogleMerchantProducts', () => {
   it('fetches active Madre products and enqueues one BullMQ job per product', async () => {
     const product = buildProduct();
     const listActive = jest.fn().mockResolvedValue(buildPage({ items: [product] }));
+    const exists = jest.fn().mockResolvedValue({ exists: false });
     const enqueueProducts = jest.fn().mockResolvedValue([
       {
         productId: '694347',
@@ -113,11 +117,15 @@ describe('PublishAllGoogleMerchantProducts', () => {
         jobId: 'run-1:B005C58VUY'
       }
     ]);
-    const service = buildQueueingService({ listActive, enqueueProducts });
+    const service = buildQueueingService({ listActive, enqueueProducts, exists });
 
     const summary = await service.execute({ runId: 'run-1' });
 
     expect(listActive).toHaveBeenCalledWith(50, 0);
+    expect(exists).toHaveBeenCalledWith({
+      marketplace: 'google-merchant',
+      sellerSku: 'B005C58VUY'
+    });
     expect(enqueueProducts).toHaveBeenCalledWith([
       {
         runId: 'run-1',
@@ -155,7 +163,39 @@ describe('PublishAllGoogleMerchantProducts', () => {
       ],
       failures: [],
       enqueueFailures: [],
-      pageFetchFailures: []
+      pageFetchFailures: [],
+      skippedItems: []
+    });
+  });
+
+  it('skips queueing products already published in Madre sync-items', async () => {
+    const product = buildProduct();
+    const listActive = jest.fn().mockResolvedValue(buildPage({ items: [product] }));
+    const exists = jest.fn().mockResolvedValue({ exists: true });
+    const enqueueProducts = jest.fn();
+    const service = buildQueueingService({ listActive, enqueueProducts, exists });
+
+    const summary = await service.execute({ runId: 'run-existing' });
+
+    expect(exists).toHaveBeenCalledWith({
+      marketplace: 'google-merchant',
+      sellerSku: 'B005C58VUY'
+    });
+    expect(enqueueProducts).not.toHaveBeenCalled();
+    expect(summary).toMatchObject({
+      queued: {
+        success: 0,
+        failed: 0
+      },
+      skipped: {
+        alreadyExists: 1
+      },
+      skippedItems: [
+        {
+          sku: 'B005C58VUY',
+          reason: 'PRODUCT_ALREADY_EXISTS'
+        }
+      ]
     });
   });
 
@@ -441,15 +481,8 @@ describe('GoogleMerchantProductPublisher', () => {
     expect(syncExecute).toHaveBeenCalledTimes(1);
   });
 
-  it('publishes products that already exist in Madre sync-items because Google insert is an upsert', async () => {
-    const create = jest.fn().mockResolvedValue({
-      success: true,
-      data: {
-        name: 'accounts/123/products/online:es:AR:B005C58VUY',
-        contentLanguage: 'es',
-        feedLabel: 'AR'
-      }
-    });
+  it('skips products that already exist in Madre sync-items', async () => {
+    const create = jest.fn();
     const syncExecute = jest.fn().mockResolvedValue(undefined);
     const exists = jest.fn().mockResolvedValue({ exists: true });
     const publisher = buildPublisher({ create, syncExecute, exists });
@@ -458,17 +491,16 @@ describe('GoogleMerchantProductPublisher', () => {
 
     expect(result).toMatchObject({
       success: true,
-      status: 'PUBLISHED',
+      status: 'SKIPPED_ALREADY_EXISTS',
       productId: '694347',
-      sku: 'B005C58VUY',
-      wasAlreadySynced: true
+      sku: 'B005C58VUY'
     });
     expect(exists).toHaveBeenCalledWith({
       marketplace: 'google-merchant',
       sellerSku: 'B005C58VUY'
     });
-    expect(create).toHaveBeenCalledTimes(1);
-    expect(syncExecute).toHaveBeenCalledTimes(1);
+    expect(create).not.toHaveBeenCalled();
+    expect(syncExecute).not.toHaveBeenCalled();
   });
 });
 

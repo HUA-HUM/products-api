@@ -10,7 +10,7 @@ import {
 } from 'src/core/entitis/marketplace-api/google-merchant/products/create/CreateGoogleMerchantProductRequest';
 
 export type GoogleMerchantProductPublisherProgress = {
-  stage: 'payload' | 'exists-check' | 'publishing' | 'published' | 'syncing' | 'synced' | 'failed';
+  stage: 'payload' | 'exists-check' | 'skipped' | 'publishing' | 'published' | 'syncing' | 'synced' | 'failed';
   productId?: string;
   sku?: string;
   attempt?: number;
@@ -34,8 +34,14 @@ export type GoogleMerchantProductPublisherResult =
       marketplaceResponse: unknown;
     }
   | {
+      success: true;
+      status: 'SKIPPED_ALREADY_EXISTS';
+      productId: string;
+      sku: string;
+    }
+  | {
       success: false;
-      status: 'PAYLOAD_ERROR' | 'PUBLISH_ERROR' | 'SYNC_ERROR';
+      status: 'PAYLOAD_ERROR' | 'EXISTS_CHECK_ERROR' | 'PUBLISH_ERROR' | 'SYNC_ERROR';
       productId: string;
       sku: string;
       error: string;
@@ -99,15 +105,35 @@ export class GoogleMerchantProductPublisher {
     const wasAlreadySynced = existsValidation.success ? existsValidation.exists : null;
 
     if (!existsValidation.success) {
-      this.logger.warn(
-        `[GOOGLE-MERCHANT][PUBLISH] exists check failed, continuing as upsert | productId=${product.id} | sku=${payload.sku} | reason=${existsValidation.error}`
+      this.logger.error(
+        `[GOOGLE-MERCHANT][PUBLISH] exists check failed | productId=${product.id} | sku=${payload.sku} | reason=${existsValidation.error}`
       );
-      await this.emitLog(callbacks, `Exists check failed, continuing as upsert: ${existsValidation.error}`);
+      await this.emitLog(callbacks, `Exists check failed: ${existsValidation.error}`);
+
+      return {
+        success: false,
+        status: 'EXISTS_CHECK_ERROR',
+        productId,
+        sku: payload.sku,
+        error: existsValidation.error,
+        retryable: true,
+        payload
+      };
     } else if (existsValidation.exists) {
-      this.logger.log(
-        `[GOOGLE-MERCHANT][PUBLISH] already in sync-items, publishing as upsert | productId=${product.id} | sku=${payload.sku}`
-      );
-      await this.emitLog(callbacks, 'Already in sync-items: publishing as upsert');
+      this.logger.log(`[GOOGLE-MERCHANT][PUBLISH] skipped already published | productId=${product.id} | sku=${payload.sku}`);
+      await this.emitProgress(callbacks, {
+        stage: 'skipped',
+        productId,
+        sku: payload.sku
+      });
+      await this.emitLog(callbacks, 'Skipped: PRODUCT_ALREADY_EXISTS');
+
+      return {
+        success: true,
+        status: 'SKIPPED_ALREADY_EXISTS',
+        productId,
+        sku: payload.sku
+      };
     }
 
     this.logger.log(
