@@ -1,6 +1,7 @@
 import { GetGoogleMerchantActiveProductsRepository } from 'src/core/drivers/repositories/madre-api/google-merchant/GetGoogleMerchantActiveProductsRepository';
 import { MadreGoogleMerchantActiveProduct } from 'src/core/entitis/madre-api/google-merchant/get/GoogleMerchantActiveProductsResponse';
 import { CreateGoogleMerchantProductRequest } from 'src/core/entitis/marketplace-api/google-merchant/products/create/CreateGoogleMerchantProductRequest';
+import { GoogleMerchantProductPublisher } from './GoogleMerchantProductPublisher';
 import { PublishAllGoogleMerchantProducts } from './PublishAllGoogleMerchantProducts';
 
 const buildProduct = (overrides: Partial<MadreGoogleMerchantActiveProduct> = {}): MadreGoogleMerchantActiveProduct => ({
@@ -31,28 +32,43 @@ const buildProduct = (overrides: Partial<MadreGoogleMerchantActiveProduct> = {})
   ...overrides
 });
 
-const buildService = (params: {
-  create: jest.Mock;
-  syncExecute: jest.Mock;
-  exists?: jest.Mock;
-  listActive?: jest.Mock;
-  products?: MadreGoogleMerchantActiveProduct[];
-}) =>
+const buildPage = (params: {
+  items?: MadreGoogleMerchantActiveProduct[];
+  limit?: number;
+  offset?: number;
+  hasNext?: boolean;
+  nextOffset?: number | null;
+}) => ({
+  items: params.items ?? [buildProduct()],
+  limit: params.limit ?? 50,
+  offset: params.offset ?? 0,
+  count: params.items?.length ?? 1,
+  total: params.items?.length ?? 1,
+  hasNext: params.hasNext ?? false,
+  nextOffset: params.nextOffset ?? null
+});
+
+const buildQueueingService = (params: { listActive?: jest.Mock; enqueueProducts?: jest.Mock }) =>
   new PublishAllGoogleMerchantProducts(
     {
-      listActive:
-        params.listActive ??
-        jest.fn().mockResolvedValue({
-          items: params.products ?? [buildProduct()],
-          limit: 50,
-          offset: 0,
-          count: params.products?.length ?? 1,
-          total: params.products?.length ?? 1,
-          hasNext: false,
-          nextOffset: null
-        }),
+      listActive: params.listActive ?? jest.fn().mockResolvedValue(buildPage({})),
       getByAsin: jest.fn()
     },
+    {
+      enqueueProducts:
+        params.enqueueProducts ??
+        jest.fn().mockImplementation(async items =>
+          items.map(item => ({
+            productId: item.product.id,
+            sku: item.product.asin ?? item.product.id,
+            jobId: `${item.runId}:${item.product.asin ?? item.product.id}`
+          }))
+        )
+    }
+  );
+
+const buildPublisher = (params: { create: jest.Mock; syncExecute: jest.Mock; exists?: jest.Mock }) =>
+  new GoogleMerchantProductPublisher(
     {
       exists: params.exists ?? jest.fn().mockResolvedValue({ exists: false })
     },
@@ -65,23 +81,15 @@ const buildService = (params: {
   );
 
 describe('PublishAllGoogleMerchantProducts', () => {
-  const previousRetryDelay = process.env.GOOGLE_MERCHANT_PUBLISH_RETRY_DELAY_MS;
   const previousMadreFetchRetryDelay = process.env.GOOGLE_MERCHANT_MADRE_FETCH_RETRY_DELAY_MS;
   const previousMadreFetchMaxAttempts = process.env.GOOGLE_MERCHANT_MADRE_FETCH_MAX_ATTEMPTS;
 
   beforeEach(() => {
-    process.env.GOOGLE_MERCHANT_PUBLISH_RETRY_DELAY_MS = '0';
     process.env.GOOGLE_MERCHANT_MADRE_FETCH_RETRY_DELAY_MS = '0';
     process.env.GOOGLE_MERCHANT_MADRE_FETCH_MAX_ATTEMPTS = '3';
   });
 
   afterAll(() => {
-    if (previousRetryDelay === undefined) {
-      delete process.env.GOOGLE_MERCHANT_PUBLISH_RETRY_DELAY_MS;
-    } else {
-      process.env.GOOGLE_MERCHANT_PUBLISH_RETRY_DELAY_MS = previousRetryDelay;
-    }
-
     if (previousMadreFetchRetryDelay === undefined) {
       delete process.env.GOOGLE_MERCHANT_MADRE_FETCH_RETRY_DELAY_MS;
     } else {
@@ -92,6 +100,186 @@ describe('PublishAllGoogleMerchantProducts', () => {
       delete process.env.GOOGLE_MERCHANT_MADRE_FETCH_MAX_ATTEMPTS;
     } else {
       process.env.GOOGLE_MERCHANT_MADRE_FETCH_MAX_ATTEMPTS = previousMadreFetchMaxAttempts;
+    }
+  });
+
+  it('fetches active Madre products and enqueues one BullMQ job per product', async () => {
+    const product = buildProduct();
+    const listActive = jest.fn().mockResolvedValue(buildPage({ items: [product] }));
+    const enqueueProducts = jest.fn().mockResolvedValue([
+      {
+        productId: '694347',
+        sku: 'B005C58VUY',
+        jobId: 'run-1:B005C58VUY'
+      }
+    ]);
+    const service = buildQueueingService({ listActive, enqueueProducts });
+
+    const summary = await service.execute({ runId: 'run-1' });
+
+    expect(listActive).toHaveBeenCalledWith(50, 0);
+    expect(enqueueProducts).toHaveBeenCalledWith([
+      {
+        runId: 'run-1',
+        product,
+        page: 1,
+        offset: 0,
+        limit: 50
+      }
+    ]);
+    expect(summary).toMatchObject({
+      runId: 'run-1',
+      mode: 'queued',
+      pagesProcessed: 1,
+      itemsFetched: 1,
+      queued: {
+        success: 1,
+        failed: 0
+      },
+      published: {
+        success: 0,
+        failed: 0
+      },
+      sync: {
+        success: 0,
+        failed: 0
+      },
+      hasNext: false,
+      nextOffset: null,
+      queuedItems: [
+        {
+          productId: '694347',
+          sku: 'B005C58VUY',
+          jobId: 'run-1:B005C58VUY'
+        }
+      ],
+      failures: [],
+      enqueueFailures: [],
+      pageFetchFailures: []
+    });
+  });
+
+  it('retries transient Madre page fetch timeouts before enqueueing the page', async () => {
+    const listActive = jest
+      .fn()
+      .mockRejectedValueOnce({
+        message: '[MADRE GET] /internal/google-merchant/products/active',
+        statusCode: 500,
+        response: {
+          message: 'timeout of 30000ms exceeded',
+          code: 'ECONNABORTED'
+        }
+      })
+      .mockResolvedValueOnce(buildPage({}));
+    const enqueueProducts = jest.fn().mockResolvedValue([
+      {
+        productId: '694347',
+        sku: 'B005C58VUY',
+        jobId: 'run-2:B005C58VUY'
+      }
+    ]);
+    const service = buildQueueingService({ listActive, enqueueProducts });
+
+    const summary = await service.execute({ runId: 'run-2' });
+
+    expect(listActive).toHaveBeenCalledTimes(2);
+    expect(summary.pageFetchFailures).toEqual([]);
+    expect(summary.queued).toEqual({
+      success: 1,
+      failed: 0
+    });
+  });
+
+  it('returns a partial queue summary when Madre page fetch keeps failing after processed products', async () => {
+    process.env.GOOGLE_MERCHANT_MADRE_FETCH_MAX_ATTEMPTS = '2';
+
+    const listActive = jest
+      .fn()
+      .mockResolvedValueOnce(
+        buildPage({
+          hasNext: true,
+          nextOffset: 50
+        })
+      )
+      .mockRejectedValue({
+        message: '[MADRE GET] /internal/google-merchant/products/active',
+        statusCode: 500,
+        response: {
+          message: 'timeout of 30000ms exceeded',
+          code: 'ECONNABORTED'
+        }
+      });
+    const enqueueProducts = jest.fn().mockResolvedValue([
+      {
+        productId: '694347',
+        sku: 'B005C58VUY',
+        jobId: 'run-3:B005C58VUY'
+      }
+    ]);
+    const service = buildQueueingService({ listActive, enqueueProducts });
+
+    const summary = await service.execute({ runId: 'run-3' });
+
+    expect(listActive).toHaveBeenCalledTimes(3);
+    expect(summary).toMatchObject({
+      pagesProcessed: 1,
+      itemsFetched: 1,
+      queued: {
+        success: 1,
+        failed: 0
+      },
+      hasNext: true,
+      nextOffset: 50,
+      pageFetchFailures: [
+        {
+          page: 2,
+          offset: 50,
+          limit: 50,
+          error: '[MADRE GET] /internal/google-merchant/products/active',
+          statusCode: 500,
+          details: {
+            message: 'timeout of 30000ms exceeded',
+            code: 'ECONNABORTED'
+          }
+        }
+      ]
+    });
+  });
+
+  it('keeps enqueue failures in the HTTP summary without stopping the page', async () => {
+    const product = buildProduct();
+    const listActive = jest.fn().mockResolvedValue(buildPage({ items: [product] }));
+    const enqueueProducts = jest.fn().mockRejectedValue(new Error('Redis unavailable'));
+    const service = buildQueueingService({ listActive, enqueueProducts });
+
+    const summary = await service.execute({ runId: 'run-4' });
+
+    expect(summary.queued).toEqual({
+      success: 0,
+      failed: 1
+    });
+    expect(summary.enqueueFailures).toEqual([
+      {
+        productId: '694347',
+        sku: 'B005C58VUY',
+        error: 'Redis unavailable'
+      }
+    ]);
+  });
+});
+
+describe('GoogleMerchantProductPublisher', () => {
+  const previousRetryDelay = process.env.GOOGLE_MERCHANT_PUBLISH_RETRY_DELAY_MS;
+
+  beforeEach(() => {
+    process.env.GOOGLE_MERCHANT_PUBLISH_RETRY_DELAY_MS = '0';
+  });
+
+  afterAll(() => {
+    if (previousRetryDelay === undefined) {
+      delete process.env.GOOGLE_MERCHANT_PUBLISH_RETRY_DELAY_MS;
+    } else {
+      process.env.GOOGLE_MERCHANT_PUBLISH_RETRY_DELAY_MS = previousRetryDelay;
     }
   });
 
@@ -106,32 +294,19 @@ describe('PublishAllGoogleMerchantProducts', () => {
     });
     const syncExecute = jest.fn().mockResolvedValue(undefined);
     const exists = jest.fn().mockResolvedValue({ exists: false });
-    const service = buildService({ create, syncExecute, exists });
+    const publisher = buildPublisher({ create, syncExecute, exists });
 
-    const summary = await service.execute();
+    const result = await publisher.execute(buildProduct());
 
-    expect(summary).toMatchObject({
-      pagesProcessed: 1,
-      itemsFetched: 1,
-      published: {
-        success: 1,
-        failed: 0
-      },
-      skipped: {
-        alreadyExists: 0
-      },
-      sync: {
-        success: 1,
-        failed: 0
-      },
-      hasNext: false,
-      nextOffset: null,
-      failures: [],
-      syncFailures: [],
-      pageFetchFailures: [],
-      skippedItems: []
+    expect(result).toMatchObject({
+      success: true,
+      status: 'PUBLISHED',
+      productId: '694347',
+      sku: 'B005C58VUY',
+      price: 670700.28,
+      stock: 1,
+      wasAlreadySynced: false
     });
-
     expect(exists).toHaveBeenCalledWith({
       marketplace: 'google-merchant',
       sellerSku: 'B005C58VUY'
@@ -210,32 +385,29 @@ describe('PublishAllGoogleMerchantProducts', () => {
       }
     });
     const syncExecute = jest.fn().mockResolvedValue(undefined);
-    const service = buildService({ create, syncExecute });
+    const publisher = buildPublisher({ create, syncExecute });
 
-    const summary = await service.execute();
+    const result = await publisher.execute(buildProduct());
 
-    expect(summary.published).toEqual({
-      success: 0,
-      failed: 1
+    expect(result).toMatchObject({
+      success: false,
+      status: 'PUBLISH_ERROR',
+      productId: '694347',
+      sku: 'B005C58VUY',
+      error: '[MARKETPLACE POST] /internal/google-merchant/products | statusCode=400 | title is required',
+      retryable: false,
+      statusCode: 400,
+      details: {
+        message: 'title is required'
+      },
+      payload: expect.objectContaining({
+        sku: 'B005C58VUY'
+      })
     });
-    expect(summary.sync).toEqual({
-      success: 0,
-      failed: 0
-    });
-    expect(summary.failures).toEqual([
-      {
-        sku: 'B005C58VUY',
-        error: '[MARKETPLACE POST] /internal/google-merchant/products | statusCode=400 | title is required',
-        statusCode: 400,
-        details: {
-          message: 'title is required'
-        }
-      }
-    ]);
     expect(syncExecute).not.toHaveBeenCalled();
   });
 
-  it('retries transient Google Merchant upstream timeouts before failing the product', async () => {
+  it('retries transient Google Merchant upstream timeouts before succeeding the product', async () => {
     const create = jest
       .fn()
       .mockResolvedValueOnce({
@@ -257,156 +429,46 @@ describe('PublishAllGoogleMerchantProducts', () => {
         }
       });
     const syncExecute = jest.fn().mockResolvedValue(undefined);
-    const service = buildService({ create, syncExecute });
+    const publisher = buildPublisher({ create, syncExecute });
 
-    const summary = await service.execute();
+    const result = await publisher.execute(buildProduct());
 
     expect(create).toHaveBeenCalledTimes(2);
-    expect(summary.published).toEqual({
-      success: 1,
-      failed: 0
+    expect(result).toMatchObject({
+      success: true,
+      status: 'PUBLISHED'
     });
-    expect(summary.sync).toEqual({
-      success: 1,
-      failed: 0
-    });
-    expect(summary.failures).toEqual([]);
     expect(syncExecute).toHaveBeenCalledTimes(1);
   });
 
-  it('skips products that already exist in Madre sync-items', async () => {
-    const create = jest.fn();
-    const syncExecute = jest.fn();
-    const exists = jest.fn().mockResolvedValue({ exists: true });
-    const service = buildService({ create, syncExecute, exists });
-
-    const summary = await service.execute();
-
-    expect(summary.published).toEqual({
-      success: 0,
-      failed: 0
-    });
-    expect(summary.skipped).toEqual({
-      alreadyExists: 1
-    });
-    expect(summary.skippedItems).toEqual([
-      {
-        sku: 'B005C58VUY',
-        reason: 'PRODUCT_ALREADY_EXISTS'
+  it('publishes products that already exist in Madre sync-items because Google insert is an upsert', async () => {
+    const create = jest.fn().mockResolvedValue({
+      success: true,
+      data: {
+        name: 'accounts/123/products/online:es:AR:B005C58VUY',
+        contentLanguage: 'es',
+        feedLabel: 'AR'
       }
-    ]);
+    });
+    const syncExecute = jest.fn().mockResolvedValue(undefined);
+    const exists = jest.fn().mockResolvedValue({ exists: true });
+    const publisher = buildPublisher({ create, syncExecute, exists });
+
+    const result = await publisher.execute(buildProduct());
+
+    expect(result).toMatchObject({
+      success: true,
+      status: 'PUBLISHED',
+      productId: '694347',
+      sku: 'B005C58VUY',
+      wasAlreadySynced: true
+    });
     expect(exists).toHaveBeenCalledWith({
       marketplace: 'google-merchant',
       sellerSku: 'B005C58VUY'
     });
-    expect(create).not.toHaveBeenCalled();
-    expect(syncExecute).not.toHaveBeenCalled();
-  });
-
-  it('retries transient Madre page fetch timeouts before publishing the page', async () => {
-    const listActive = jest
-      .fn()
-      .mockRejectedValueOnce({
-        message: '[MADRE GET] /internal/google-merchant/products/active',
-        statusCode: 500,
-        response: {
-          message: 'timeout of 30000ms exceeded',
-          code: 'ECONNABORTED'
-        }
-      })
-      .mockResolvedValueOnce({
-        items: [buildProduct()],
-        limit: 50,
-        offset: 0,
-        count: 1,
-        total: 1,
-        hasNext: false,
-        nextOffset: null
-      });
-    const create = jest.fn().mockResolvedValue({
-      success: true,
-      data: {
-        name: 'accounts/123/products/online:es:AR:B005C58VUY'
-      }
-    });
-    const syncExecute = jest.fn().mockResolvedValue(undefined);
-    const service = buildService({ create, syncExecute, listActive });
-
-    const summary = await service.execute();
-
-    expect(listActive).toHaveBeenCalledTimes(2);
-    expect(summary.pageFetchFailures).toEqual([]);
-    expect(summary.published).toEqual({
-      success: 1,
-      failed: 0
-    });
-    expect(summary.sync).toEqual({
-      success: 1,
-      failed: 0
-    });
-  });
-
-  it('returns a partial summary when Madre page fetch keeps failing after processed products', async () => {
-    process.env.GOOGLE_MERCHANT_MADRE_FETCH_MAX_ATTEMPTS = '2';
-
-    const listActive = jest
-      .fn()
-      .mockResolvedValueOnce({
-        items: [buildProduct()],
-        limit: 50,
-        offset: 0,
-        count: 1,
-        total: 2,
-        hasNext: true,
-        nextOffset: 50
-      })
-      .mockRejectedValue({
-        message: '[MADRE GET] /internal/google-merchant/products/active',
-        statusCode: 500,
-        response: {
-          message: 'timeout of 30000ms exceeded',
-          code: 'ECONNABORTED'
-        }
-      });
-    const create = jest.fn().mockResolvedValue({
-      success: true,
-      data: {
-        name: 'accounts/123/products/online:es:AR:B005C58VUY'
-      }
-    });
-    const syncExecute = jest.fn().mockResolvedValue(undefined);
-    const service = buildService({ create, syncExecute, listActive });
-
-    const summary = await service.execute();
-
-    expect(listActive).toHaveBeenCalledTimes(3);
-    expect(summary).toMatchObject({
-      pagesProcessed: 1,
-      itemsFetched: 1,
-      published: {
-        success: 1,
-        failed: 0
-      },
-      sync: {
-        success: 1,
-        failed: 0
-      },
-      hasNext: true,
-      nextOffset: 50,
-      pageFetchFailures: [
-        {
-          page: 2,
-          offset: 50,
-          limit: 50,
-          error: '[MADRE GET] /internal/google-merchant/products/active',
-          statusCode: 500,
-          details: {
-            message: 'timeout of 30000ms exceeded',
-            code: 'ECONNABORTED'
-          }
-        }
-      ]
-    });
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(syncExecute).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -418,7 +480,11 @@ describe('GetGoogleMerchantActiveProductsRepository', () => {
   });
 
   afterAll(() => {
-    process.env.INTERNAL_API_KEY = previousInternalApiKey;
+    if (previousInternalApiKey === undefined) {
+      delete process.env.INTERNAL_API_KEY;
+    } else {
+      process.env.INTERNAL_API_KEY = previousInternalApiKey;
+    }
   });
 
   it('normalizes raw Madre product lists into a paginated response', async () => {
