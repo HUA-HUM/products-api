@@ -1,5 +1,6 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import { BulkMarketplaceProductsDto } from 'src/core/entitis/madre-api/product-sync/dto/BulkMarketplaceProductsDto';
+import { ICheckProductExistsRepository } from 'src/core/adapters/repositories/madre/Sync_items/CheckProductExists/ICheckProductExistsRepository';
 import { ISendBulkProductSyncRepository } from 'src/core/adapters/repositories/madre/product-sync/ISendBulkProductSyncRepository';
 import { IProductSyncRepository } from 'src/core/adapters/repositories/madre/product-sync/IProductSyncRepository';
 import { ProductSyncMarketplace } from 'src/core/entitis/madre-api/product-sync/ProductSyncMarketplace';
@@ -24,6 +25,8 @@ type FetchProductsResult = Awaited<
   ReturnType<ReturnType<MarketplaceImportStrategyResolver['resolve']>['getProducts']>
 >;
 
+type SyncItemPayload = BulkMarketplaceProductsDto['items'][number];
+
 @Injectable()
 export class ImportMarketplaceProducts {
   private readonly logger = new Logger(ImportMarketplaceProducts.name);
@@ -42,7 +45,10 @@ export class ImportMarketplaceProducts {
     private readonly sendBulkProductSync: ISendBulkProductSyncRepository,
 
     @Inject('IProductSyncRepository')
-    private readonly syncRuns: IProductSyncRepository
+    private readonly syncRuns: IProductSyncRepository,
+
+    @Inject('ICheckProductExistsRepository')
+    private readonly checkProductExists: ICheckProductExistsRepository
   ) {}
 
   async execute(
@@ -129,7 +135,32 @@ export class ImportMarketplaceProducts {
           raw: item.raw ?? item
         }));
 
-        const payloadBatches = this.chunkItems(mappedItems, this.MADRE_BULK_MAX_ITEMS);
+        const filterResult = await this.filterItemsBeforeSync(marketplace, mappedItems);
+
+        if (filterResult.skipped > 0 || filterResult.failed > 0) {
+          failedItems += filterResult.failed;
+
+          await this.syncRuns.progress(runId, {
+            batches: 0,
+            items: 0,
+            failed: filterResult.failed
+          });
+
+          this.logger.log(
+            `[IMPORT][${marketplace}] pre-sync filter | input=${mappedItems.length} | toSync=${filterResult.items.length} | skippedExisting=${filterResult.skipped} | failed=${filterResult.failed}`
+          );
+
+          onProgress?.(
+            {
+              batchesProcessed: totalBatches,
+              itemsProcessed: totalItems,
+              itemsFailed: failedItems
+            },
+            `Pre-sync filter | input=${mappedItems.length} | toSync=${filterResult.items.length} | skippedExisting=${filterResult.skipped} | failed=${filterResult.failed}`
+          );
+        }
+
+        const payloadBatches = this.chunkItems(filterResult.items, this.MADRE_BULK_MAX_ITEMS);
 
         for (const payloadItems of payloadBatches) {
           totalBatches++;
@@ -244,6 +275,62 @@ export class ImportMarketplaceProducts {
     }
 
     return this.MIN_FETCH_BATCH_LIMIT;
+  }
+
+  private async filterItemsBeforeSync(
+    marketplace: ProductSyncMarketplace,
+    items: SyncItemPayload[]
+  ): Promise<{
+    items: SyncItemPayload[];
+    skipped: number;
+    failed: number;
+  }> {
+    if (marketplace !== 'google-merchant') {
+      return {
+        items,
+        skipped: 0,
+        failed: 0
+      };
+    }
+
+    const itemsToSync: SyncItemPayload[] = [];
+    let skipped = 0;
+    let failed = 0;
+
+    for (const item of items) {
+      try {
+        this.logger.log(
+          `[IMPORT][google-merchant] checking sync item exists | sellerSku=${item.sellerSku} | externalId=${item.externalId}`
+        );
+
+        const existsResponse = await this.checkProductExists.exists({
+          marketplace,
+          sellerSku: item.sellerSku
+        });
+
+        if (existsResponse.exists === true) {
+          skipped++;
+          this.logger.log(
+            `[IMPORT][google-merchant] skipped existing sync item | sellerSku=${item.sellerSku} | externalId=${item.externalId}`
+          );
+          continue;
+        }
+
+        itemsToSync.push(item);
+      } catch (error: any) {
+        failed++;
+        this.logger.error(
+          `[IMPORT][google-merchant] exists check failed, skipping insert | sellerSku=${item.sellerSku} | externalId=${item.externalId} | reason=${error?.message ?? 'PRODUCT_EXISTS_CHECK_ERROR'}`,
+          error?.response ? JSON.stringify(error.response) : undefined
+        );
+      }
+    }
+
+    return {
+      items: itemsToSync,
+      skipped,
+      failed
+    };
   }
 
   private async sendWithRetry(payload: BulkMarketplaceProductsDto): Promise<SendBulkResult> {

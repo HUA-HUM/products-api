@@ -1,5 +1,8 @@
 import { Module } from '@nestjs/common';
 import { PublishAllGoogleMerchantProductsController } from 'src/app/controller/google-merchant/PublishAllGoogleMerchantProducts.Controller';
+import { GoogleMerchantPublishProductsQueueService } from 'src/app/services/google-merchant/queues/GoogleMerchantPublishProductsQueueService';
+import { GoogleMerchantPublishProductsWorker } from 'src/app/services/google-merchant/workers/GoogleMerchantPublishProductsWorker';
+import { GoogleMerchantProductPublisher } from 'src/core/interactors/google-merchant/publish/GoogleMerchantProductPublisher';
 import { PublishAllGoogleMerchantProducts } from 'src/core/interactors/google-merchant/publish/PublishAllGoogleMerchantProducts';
 import { GetGoogleMerchantActiveProductsRepository } from 'src/core/drivers/repositories/madre-api/google-merchant/GetGoogleMerchantActiveProductsRepository';
 import { MadreHttpClient } from 'src/core/drivers/repositories/madre-api/http/MadreHttpClient';
@@ -12,8 +15,14 @@ import { CheckProductExistsRepository } from 'src/core/drivers/repositories/madr
   controllers: [PublishAllGoogleMerchantProductsController],
   providers: [
     PublishAllGoogleMerchantProducts,
+    GoogleMerchantProductPublisher,
+    GoogleMerchantPublishProductsWorker,
     MadreHttpClient,
     MarketplaceHttpClient,
+    {
+      provide: 'IGoogleMerchantPublishProductsQueue',
+      useClass: GoogleMerchantPublishProductsQueueService
+    },
     {
       provide: 'IGetGoogleMerchantActiveProductsRepository',
       useClass: GetGoogleMerchantActiveProductsRepository

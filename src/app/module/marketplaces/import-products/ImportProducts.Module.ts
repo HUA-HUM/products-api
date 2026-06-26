@@ -22,6 +22,7 @@ import { GetGoogleMerchantProductsAdapter } from 'src/core/drivers/repositories/
 import { SendBulkProductSyncRepository } from 'src/core/drivers/repositories/madre-api/product-sync/SendBulkProductSyncRepository';
 import { ProductSyncRepository } from 'src/core/drivers/repositories/madre-api/product-sync/ProductSyncRepository';
 import { GetProductSyncRunsRepository } from 'src/core/drivers/repositories/madre-api/product-sync/GetProductSyncRunsRepository';
+import { CheckProductExistsRepository } from 'src/core/drivers/repositories/madre-api/Sync_items/CheckProductExists/CheckProductExistsRepository';
 
 @Module({
   providers: [
@@ -39,6 +40,10 @@ import { GetProductSyncRunsRepository } from 'src/core/drivers/repositories/madr
     {
       provide: 'IGetProductSyncRunsRepository',
       useClass: GetProductSyncRunsRepository
+    },
+    {
+      provide: 'ICheckProductExistsRepository',
+      useClass: CheckProductExistsRepository
     },
 
     {

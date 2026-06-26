@@ -6,6 +6,7 @@ class PublishAllGoogleMerchantProductsBody {
   limit?: number;
   offset?: number;
   maxPages?: number;
+  runId?: string;
 }
 
 @ApiTags('Google Merchant')
@@ -17,7 +18,7 @@ export class PublishAllGoogleMerchantProductsController {
   @ApiOperation({
     summary: 'Publicar masivamente productos activos en Google Merchant',
     description:
-      'Consulta los productos activos desde Madre API y publica cada producto en marketplace-api para Google Merchant.'
+      'Consulta los productos activos desde Madre API y encola un job BullMQ por producto para publicarlo/upsertearlo en Google Merchant.'
   })
   @ApiBody({
     type: PublishAllGoogleMerchantProductsBody,
