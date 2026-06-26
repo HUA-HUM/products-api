@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { IGoogleMerchantPublishProductsQueue } from 'src/core/adapters/queues/google-merchant/IGoogleMerchantPublishProductsQueue';
+import { ICheckProductExistsRepository } from 'src/core/adapters/repositories/madre/Sync_items/CheckProductExists/ICheckProductExistsRepository';
 import { IGetGoogleMerchantActiveProductsRepository } from 'src/core/adapters/repositories/madre/google-merchant/get/IGetGoogleMerchantActiveProductsRepository';
 import { MadreGoogleMerchantActiveProduct } from 'src/core/entitis/madre-api/google-merchant/get/GoogleMerchantActiveProductsResponse';
 
@@ -76,7 +77,10 @@ export class PublishAllGoogleMerchantProducts {
     private readonly getActiveProducts: IGetGoogleMerchantActiveProductsRepository,
 
     @Inject('IGoogleMerchantPublishProductsQueue')
-    private readonly publishProductsQueue: IGoogleMerchantPublishProductsQueue
+    private readonly publishProductsQueue: IGoogleMerchantPublishProductsQueue,
+
+    @Inject('ICheckProductExistsRepository')
+    private readonly checkProductExists: ICheckProductExistsRepository
   ) {}
 
   async execute(input: PublishAllGoogleMerchantProductsInput = {}): Promise<PublishAllGoogleMerchantProductsSummary> {
@@ -161,6 +165,12 @@ export class PublishAllGoogleMerchantProducts {
       }
 
       for (const product of page.items) {
+        const existsValidation = await this.validateProductDoesNotExist(product, summary);
+
+        if (!existsValidation.success || existsValidation.exists) {
+          continue;
+        }
+
         await this.enqueueProduct(product, {
           runId,
           page: pagesProcessed,
@@ -187,6 +197,61 @@ export class PublishAllGoogleMerchantProducts {
     );
 
     return summary;
+  }
+
+  private async validateProductDoesNotExist(
+    product: MadreGoogleMerchantActiveProduct,
+    summary: PublishAllGoogleMerchantProductsSummary
+  ): Promise<{ success: true; exists: boolean } | { success: false; error: string }> {
+    const productId = String(product.id ?? '').trim();
+    const sku = this.resolveSku(product);
+
+    try {
+      this.logger.log(`[GOOGLE-MERCHANT][PUBLISH][QUEUE] exists check | productId=${productId || '-'} | sku=${sku}`);
+
+      const response = await this.checkProductExists.exists({
+        marketplace: 'google-merchant',
+        sellerSku: sku
+      });
+
+      if (response.exists === true) {
+        summary.skipped.alreadyExists += 1;
+        summary.skippedItems.push({
+          sku,
+          reason: 'PRODUCT_ALREADY_EXISTS'
+        });
+
+        this.logger.log(
+          `[GOOGLE-MERCHANT][PUBLISH][QUEUE] skipped already published | productId=${productId || '-'} | sku=${sku}`
+        );
+
+        return {
+          success: true,
+          exists: true
+        };
+      }
+
+      return {
+        success: true,
+        exists: false
+      };
+    } catch (error: any) {
+      const errorMessage = error?.message ?? 'PRODUCT_EXISTS_CHECK_ERROR';
+      summary.queued.failed += 1;
+      summary.failures.push({
+        sku,
+        error: errorMessage
+      });
+
+      this.logger.error(
+        `[GOOGLE-MERCHANT][PUBLISH][QUEUE] exists check failed | productId=${productId || '-'} | sku=${sku} | reason=${errorMessage}`
+      );
+
+      return {
+        success: false,
+        error: errorMessage
+      };
+    }
   }
 
   private async enqueueProduct(
