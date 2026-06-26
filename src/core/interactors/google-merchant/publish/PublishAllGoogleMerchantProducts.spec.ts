@@ -61,7 +61,7 @@ const buildQueueingService = (params: { listActive?: jest.Mock; enqueueProducts?
           items.map(item => ({
             productId: item.product.id,
             sku: item.product.asin ?? item.product.id,
-            jobId: `${item.runId}:${item.product.asin ?? item.product.id}`
+            jobId: `${item.runId}-${item.product.asin ?? item.product.id}`
           }))
         )
     },
@@ -114,7 +114,7 @@ describe('PublishAllGoogleMerchantProducts', () => {
       {
         productId: '694347',
         sku: 'B005C58VUY',
-        jobId: 'run-1:B005C58VUY'
+        jobId: 'run-1-B005C58VUY'
       }
     ]);
     const service = buildQueueingService({ listActive, enqueueProducts, exists });
@@ -158,7 +158,7 @@ describe('PublishAllGoogleMerchantProducts', () => {
         {
           productId: '694347',
           sku: 'B005C58VUY',
-          jobId: 'run-1:B005C58VUY'
+          jobId: 'run-1-B005C58VUY'
         }
       ],
       failures: [],
@@ -215,7 +215,7 @@ describe('PublishAllGoogleMerchantProducts', () => {
       {
         productId: '694347',
         sku: 'B005C58VUY',
-        jobId: 'run-2:B005C58VUY'
+        jobId: 'run-2-B005C58VUY'
       }
     ]);
     const service = buildQueueingService({ listActive, enqueueProducts });
@@ -253,7 +253,7 @@ describe('PublishAllGoogleMerchantProducts', () => {
       {
         productId: '694347',
         sku: 'B005C58VUY',
-        jobId: 'run-3:B005C58VUY'
+        jobId: 'run-3-B005C58VUY'
       }
     ]);
     const service = buildQueueingService({ listActive, enqueueProducts });
