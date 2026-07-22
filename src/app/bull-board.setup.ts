@@ -3,13 +3,18 @@ import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { ExpressAdapter } from '@bull-board/express';
 import { googleMerchantPublishProductsQueue } from 'src/app/driver/repository/redis/google-merchant-publish-products.queue';
 import { importMarketplaceQueue } from 'src/app/driver/repository/redis/import-marketplace.queue';
+import { refreshMarketplacePublishedQueue } from 'src/app/driver/repository/redis/refresh-marketplace-published.queue';
 
 export function setupBullBoard(app) {
   const serverAdapter = new ExpressAdapter();
   serverAdapter.setBasePath('/admin/queues');
 
   createBullBoard({
-    queues: [new BullMQAdapter(importMarketplaceQueue), new BullMQAdapter(googleMerchantPublishProductsQueue)],
+    queues: [
+      new BullMQAdapter(importMarketplaceQueue),
+      new BullMQAdapter(googleMerchantPublishProductsQueue),
+      new BullMQAdapter(refreshMarketplacePublishedQueue)
+    ],
     serverAdapter
   });
 
