@@ -13,6 +13,7 @@ import { ISendBulkProductSyncRepository } from 'src/core/adapters/repositories/m
 import { BulkMarketplaceProductsDto } from 'src/core/entitis/madre-api/product-sync/dto/BulkMarketplaceProductsDto';
 import { ProductSyncStatus } from 'src/core/entitis/madre-api/product-sync/ProductSyncStatus';
 import { MarketplaceActionResult } from 'src/core/entitis/marketplace-changes/MarketplaceActionResult';
+import { isNotPublishedMarketplaceMessage } from 'src/core/interactors/marketplace-changes/marketplace-actions/shared/MarketplacePublicationState';
 import { ExecuteManualPriceUpdate } from './ExecuteManualPriceUpdate';
 import { ExecuteManualStatusUpdate } from './ExecuteManualStatusUpdate';
 import { ExecuteManualStockUpdate } from './ExecuteManualStockUpdate';
@@ -155,7 +156,8 @@ export class RefreshMarketplacePublishedItems {
         marketplace: input.marketplace,
         sku,
         foundInMadre: false,
-        skipped: false,
+        skipped: sync.status === 'SKIPPED',
+        skipReason: sync.status === 'SKIPPED' ? sync.error : undefined,
         updates,
         sync
       };
@@ -198,7 +200,8 @@ export class RefreshMarketplacePublishedItems {
       marketplace: input.marketplace,
       sku,
       foundInMadre: true,
-      skipped: false,
+      skipped: sync.status === 'SKIPPED',
+      skipReason: sync.status === 'SKIPPED' ? sync.error : undefined,
       madre: {
         price: madreItem.price,
         stock: madreItem.stock,
@@ -385,8 +388,15 @@ export class RefreshMarketplacePublishedItems {
     updates: MarketplaceUpdateResults;
   }): Promise<MadreSyncResult> {
     if (!this.hasSuccessfulMarketplaceUpdate(params.updates)) {
+      if (this.hasOnlyNotPublishedMarketplaceFailures(params.updates)) {
+        return {
+          status: 'SKIPPED',
+          error: `SKU=${params.sku} is not published in marketplace=${params.marketplace}`
+        };
+      }
+
       return {
-        status: 'SKIPPED',
+        status: 'FAILED',
         error: 'No marketplace update succeeded'
       };
     }
@@ -459,6 +469,19 @@ export class RefreshMarketplacePublishedItems {
 
   private hasSuccessfulMarketplaceUpdate(updates: MarketplaceUpdateResults): boolean {
     return [updates.price, updates.stock, updates.status].some(update => update?.status === 'SUCCESS');
+  }
+
+  private hasOnlyNotPublishedMarketplaceFailures(updates: MarketplaceUpdateResults): boolean {
+    const attemptedUpdates = [updates.price, updates.stock, updates.status].filter(
+      (update): update is MarketplaceActionResult => update !== null
+    );
+
+    return (
+      attemptedUpdates.length > 0 &&
+      attemptedUpdates.every(
+        update => update.status === 'FAILED' && isNotPublishedMarketplaceMessage(update.error)
+      )
+    );
   }
 
   private accumulateSyncResult(summary: RefreshMarketplacePublishedItemsSummary, result: MadreSyncResult): void {

@@ -1,5 +1,5 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { Job, UnrecoverableError, Worker } from 'bullmq';
+import { Job, Worker } from 'bullmq';
 import { bullmqConnection } from 'src/app/driver/repository/redis/bullmq.connection';
 import { REFRESH_MARKETPLACE_PUBLISHED_QUEUE_NAME } from 'src/app/driver/repository/redis/refresh-marketplace-published.queue';
 import { RefreshMarketplacePublishedItemJobData } from 'src/core/entitis/marketplace-changes/RefreshMarketplacePublishedItemJob';
@@ -52,10 +52,6 @@ export class RefreshMarketplacePublishedWorker implements OnModuleInit, OnModule
 
         if (result.sync.status === 'SKIPPED') {
           await job.log(`SKIPPED: ${result.sync.error ?? 'no marketplace update succeeded'}`);
-
-          if (!result.skipped) {
-            throw new UnrecoverableError(result.sync.error ?? 'No marketplace update succeeded');
-          }
         }
 
         this.logger.log(
