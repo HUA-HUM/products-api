@@ -63,6 +63,7 @@ export class ImportMarketplaceProducts {
     let offset = strategy.initialOffset ?? 0;
     let hasNext = true;
     let knownTotal: number | null = null;
+    let endedByUnexpectedEmptyPage = false;
 
     let totalBatches = 0;
     let totalItems = 0;
@@ -81,7 +82,7 @@ export class ImportMarketplaceProducts {
           response = await this.fetchProductsWithRetry(strategy, marketplace, offset, requestedLimit);
         } catch (err: any) {
           if (totalItems > 0) {
-            await this.syncRuns.finish(runId, 'PARTIAL');
+            await this.finishRunWithRetry(runId, 'PARTIAL');
 
             this.logger.error(
               `[IMPORT][${marketplace}] stopped early after partial import | runId=${runId} | offset=${offset} | imported=${totalItems} | failed=${failedItems} | statusCode=${err?.statusCode ?? 'unknown'} | response=${JSON.stringify(err?.response ?? err?.data ?? null)}`
@@ -108,8 +109,10 @@ export class ImportMarketplaceProducts {
 
         if (response.items.length === 0) {
           if (knownTotal !== null && offset < knownTotal) {
-            throw new Error(
-              `[${marketplace}] Unexpected empty page before reaching total | offset=${offset} | total=${knownTotal}`
+            endedByUnexpectedEmptyPage = true;
+
+            this.logger.warn(
+              `[IMPORT][${marketplace}] empty page before reported total, stopping import defensively | runId=${runId} | offset=${offset} | total=${knownTotal} | imported=${totalItems}`
             );
           }
 
@@ -205,17 +208,26 @@ export class ImportMarketplaceProducts {
             throw new Error(`[${marketplace}] Missing nextOffset while hasNext=true`);
           }
 
+          if (response.nextOffset <= offset) {
+            endedByUnexpectedEmptyPage = true;
+            this.logger.warn(
+              `[IMPORT][${marketplace}] non-advancing nextOffset, stopping import defensively | runId=${runId} | offset=${offset} | nextOffset=${response.nextOffset}`
+            );
+            break;
+          }
+
           offset = response.nextOffset!;
         }
       }
 
-      await this.syncRuns.finish(runId, failedItems > 0 ? 'PARTIAL' : 'SUCCESS');
+      const finalStatus = failedItems > 0 || endedByUnexpectedEmptyPage ? 'PARTIAL' : 'SUCCESS';
+      await this.finishRunWithRetry(runId, finalStatus);
 
       this.logger.log(
-        `[IMPORT][${marketplace}] finished | runId=${runId} | batches=${totalBatches} | items=${totalItems}`
+        `[IMPORT][${marketplace}] finished | runId=${runId} | status=${finalStatus} | batches=${totalBatches} | items=${totalItems}`
       );
     } catch (err: any) {
-      await this.syncRuns.fail(runId, err?.message ?? 'Unknown error');
+      await this.failRunWithRetry(runId, err?.message ?? 'Unknown error');
       this.logger.error(
         `[IMPORT][${marketplace}] failed | runId=${runId} | statusCode=${err?.statusCode ?? 'unknown'} | response=${JSON.stringify(err?.response ?? err?.data ?? null)}`,
         err?.stack
@@ -260,6 +272,36 @@ export class ImportMarketplaceProducts {
       );
 
       return this.fetchProductsWithRetry(strategy, marketplace, offset, fallbackLimit);
+    }
+
+    throw lastError;
+  }
+
+  private async finishRunWithRetry(runId: string, status: 'SUCCESS' | 'PARTIAL'): Promise<void> {
+    await this.runWithRetry(`finish run ${runId}`, () => this.syncRuns.finish(runId, status));
+  }
+
+  private async failRunWithRetry(runId: string, errorMessage: string): Promise<void> {
+    await this.runWithRetry(`fail run ${runId}`, () => this.syncRuns.fail(runId, errorMessage));
+  }
+
+  private async runWithRetry(label: string, fn: () => Promise<unknown>): Promise<void> {
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= this.MAX_RETRIES; attempt++) {
+      try {
+        await fn();
+        return;
+      } catch (error) {
+        lastError = error;
+        const message = error instanceof Error ? error.message : String(error);
+
+        this.logger.warn(`[IMPORT] ${label} retry ${attempt}/${this.MAX_RETRIES} failed | ${message}`);
+
+        if (attempt < this.MAX_RETRIES) {
+          await new Promise(res => setTimeout(res, this.RETRY_DELAY_MS));
+        }
+      }
     }
 
     throw lastError;
